@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.0 — 2026-10-15
+
+- **Provider freedom**: decision provider is pluggable — TypeSafe JEV (default),
+  OpenAI Decisions, or any OpenAI-compatible chat endpoint (OpenAI, OpenRouter,
+  Ollama, LM Studio) via a finite-choice transport. Wire format covered by a stub
+  test; live auth/request verified (an instruction-following model is required).
+- **Replay 2.0**: cache entries are parameterized templates — the same workflow with
+  different input values replays with zero model calls (verified: foreign form data,
+  1.27 s). A replay that breaks mid-way hands the reached state to the model (delta).
+- **Pattern-first desktop**: UIA Invoke/Toggle/SelectionItem/ValuePattern before any
+  foreground activation; the user's foreground window is restored after desktop runs.
+  Fixed a freshness bug where the follow-up key after typing erased the executed
+  TYPE_TEXT from history (and from recorded trajectories).
+- **Transition verification**: optional expected state after specific steps; a wrong
+  transition stops the run even if the final screen would look right.
+- **MCP server** (`nitrolane_mcp.py`), **`doctor`** mode, one-command `install.ps1`.
+- **Public benchmark** (`tests/bench.py`): form 4.64 s model / 1.27 s replay,
+  wiki search 3.09 s, Notepad 1.85 s, Calculator 2.9–5.3 s (medians of 2).
+- Action confidence gate 0.45 → 0.35 (battery-derived: correct multi-field first
+  steps score 0.33–0.43); full battery re-verified at the new gate.
+
 ## v0.1.0 — 2026-10-15
 
 First public release.

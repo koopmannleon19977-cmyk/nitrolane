@@ -129,18 +129,58 @@ def _step(h: dict, rec) -> str:
     return " ".join(parts)
 
 
+class _ReplayFailed(Exception):
+    """Replay stopped after `done` executed steps; the caller decides whether resetting is safe."""
+
+    def __init__(self, done: int, cause: Exception):
+        super().__init__(f"replay failed after {done} steps: {cause}")
+        self.done = done
+
+
+def _subs(inputs: dict) -> list[tuple[str, str]]:
+    """(literal value, input key) pairs, longest first so replacements never shadow each other."""
+    return sorted(((str(v), k) for k, v in inputs.items() if str(v)), key=lambda t: -len(t[0]))
+
+
+def _templatize(node, subs):
+    if isinstance(node, str):
+        for value, key in subs:
+            node = node.replace(value, "{" + key + "}")
+        return node
+    if isinstance(node, dict):
+        return {k: (sorted(inputs) if k == "inputs" and isinstance(v, dict) else _templatize(v, subs))
+                for k, v in node.items() for inputs in [v]}
+    if isinstance(node, list):
+        return [_templatize(x, subs) for x in node]
+    return node
+
+
 def _cache_path(req: dict) -> Path:
-    canonical = {"target": req["target"], "url": req.get("url"), "app": req.get("app"),
-                 "subtask": req["subtask"], "check": req.get("check")}
+    """Template identity: same task with different input values maps to the same entry."""
+    subs = _subs(req["subtask"].get("inputs") or {})
+    canonical = _templatize({"target": req["target"], "url": req.get("url"), "app": req.get("app"),
+                             "subtask": req["subtask"], "check": req.get("check")}, subs)
     digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:24]
-    return CACHE_DIR / f"{digest}.json"
+    return CACHE_DIR / f"t-{digest}.json"
 
 
-def _recorded_steps(history_dicts: list[dict]) -> list[dict]:
-    """Name-based trajectory: element ids die with the session, names+bounds are resolvable again."""
-    return [{k: h.get(k) for k in ("action", "target_name", "target_bounds", "value", "key", "hotkey",
+def _recorded_steps(history_dicts: list[dict], inputs: dict) -> list[dict]:
+    """Name-based trajectory: element ids die with the session, names+bounds are resolvable again.
+
+    Values that came from `inputs` are stored as {"$input": key} so the template replays with new data.
+    """
+    subs = _subs(inputs)
+    steps = []
+    for h in history_dicts:
+        s = {k: h.get(k) for k in ("action", "target_name", "target_bounds", "value", "key", "hotkey",
                                     "click_modifier", "scroll_direction")}
-            for h in history_dicts]
+        for value, key in subs:
+            if s["value"] == value or (isinstance(s["value"], (int, float)) and str(s["value"]) == value):
+                s["value"] = {"$input": key}
+            if s["target_name"] and value in s["target_name"]:
+                s["target_name"] = s["target_name"].replace(value, "{" + key + "}")
+        steps.append(s)
+    return steps
 
 
 def _settle(backend, before_revision: str, timeout_s: float = 1.2):
@@ -165,36 +205,166 @@ def _settle(backend, before_revision: str, timeout_s: float = 1.2):
     return backend.observe()
 
 
-def _replay(backend, steps: list[dict]) -> None:
-    """Re-execute a verified trajectory without any model call. Raises on any mismatch."""
+def _replay(backend, steps: list[dict], inputs: dict) -> None:
+    """Re-execute a verified trajectory without any model call. Raises _ReplayFailed on any mismatch."""
     snap = backend.observe()
-    for s in steps:
-        kind = ActionKind(s["action"])
-        target = None
-        if s.get("target_name") is not None:
-            cands = [e for e in snap.elements if e.visible and e.enabled and e.name == s["target_name"] and kind in e.actions]
-            if not cands:
-                raise LookupError(f"replay target not offered: {s['action']} {s['target_name']!r}")
-            b = s.get("target_bounds")
-            if len(cands) > 1 and b:
-                cands.sort(key=lambda e: (abs(e.bounds.x - b["x"]) + abs(e.bounds.y - b["y"])) if e.bounds else 1e18)
-            target = cands[0]
-        before = snap.revision
-        backend.execute(snap, ExecutableAction(kind=kind, target_id=target.id if target else None,
-                                               target_guard=target.semantic_guard() if target else None,
-                                               value=s.get("value"), key=s.get("key"), hotkey=s.get("hotkey"),
-                                               click_modifier=s.get("click_modifier"),
-                                               scroll_direction=s.get("scroll_direction")))
-        snap = _settle(backend, before)
-        if kind == ActionKind.TYPE_TEXT and s.get("key"):  # runtime submits the key after the value lands
+    for i, s in enumerate(steps):
+        try:
+            kind = ActionKind(s["action"])
+            name = s.get("target_name")
+            if name is not None:
+                for key, value in inputs.items():
+                    name = name.replace("{" + key + "}", str(value))
+            value = s.get("value")
+            if isinstance(value, dict) and "$input" in value:
+                if value["$input"] not in inputs:
+                    raise LookupError(f"replay needs input {value['$input']!r}")
+                value = inputs[value["$input"]]
+            target = None
+            if name is not None:
+                cands = [e for e in snap.elements if e.visible and e.enabled and e.name == name and kind in e.actions]
+                if not cands:
+                    raise LookupError(f"replay target not offered: {s['action']} {name!r}")
+                b = s.get("target_bounds")
+                if len(cands) > 1 and b:
+                    cands.sort(key=lambda e: (abs(e.bounds.x - b["x"]) + abs(e.bounds.y - b["y"])) if e.bounds else 1e18)
+                target = cands[0]
             before = snap.revision
-            backend.execute(snap, ExecutableAction(kind=ActionKind.PRESS_KEY, key=s["key"]))
+            backend.execute(snap, ExecutableAction(kind=kind, target_id=target.id if target else None,
+                                                   target_guard=target.semantic_guard() if target else None,
+                                                   value=value, key=s.get("key"), hotkey=s.get("hotkey"),
+                                                   click_modifier=s.get("click_modifier"),
+                                                   scroll_direction=s.get("scroll_direction")))
             snap = _settle(backend, before)
+            if kind == ActionKind.TYPE_TEXT and s.get("key"):  # runtime submits the key after the value lands
+                before = snap.revision
+                backend.execute(snap, ExecutableAction(kind=ActionKind.PRESS_KEY, key=s["key"]))
+                snap = _settle(backend, before)
+        except Exception as exc:
+            raise _ReplayFailed(i, exc) from exc
 
 
+class ChatChoiceTransport:
+    """Finite-choice decisions from any OpenAI-compatible chat endpoint (OpenAI, OpenRouter, Ollama, LM Studio, …).
+
+    The model only picks offered criteria keys; ChoicePolicy validates every answer.
+    """
+
+    name = "Chat (OpenAI-compatible)"
+    full_distribution = False  # chat models report a choice + confidence, not a distribution
+
+    def __init__(self, model: str, base_url: str = "https://api.openai.com/v1", api_key: str | None = None, timeout_s: float = 60):
+        import httpx
+
+        self.model, self.base_url = model, base_url.rstrip("/")
+        self.client = httpx.Client(timeout=timeout_s, headers={"Authorization": f"Bearer {api_key}"} if api_key else {})
+
+    def ask(self, state, questions, *, images=()):
+        if images:
+            raise ValueError("Chat transport takes no screenshots in nitrolane")
+        body = {"model": self.model, "temperature": 0, "messages": [
+            {"role": "system", "content": "You answer UI choice questions. For EVERY question choose exactly one key "
+                                          "from its criteria. Reply with ONLY this JSON: "
+                                          "{\"answers\": {\"<question>\": {\"choice\": \"<key>\", \"confidence\": 0.0-1.0}}}"},
+            {"role": "user", "content": json.dumps({"state": state, "questions": questions}, ensure_ascii=False)}]}
+        response = self.client.post(f"{self.base_url}/chat/completions", json=body)
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"].strip()
+        parsed = json.loads(content[content.index("{"):content.rindex("}") + 1])
+        return {"answers": parsed["answers"], "model": self.model}
+
+
+def _user_env(name: str) -> str | None:
+    """Process env first, then the Windows user environment (hosts with a frozen env miss setx values)."""
+    if os.environ.get(name):
+        return os.environ[name]
+    if sys.platform == "win32" and name:
+        import winreg
+
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+                return winreg.QueryValueEx(k, name)[0]
+        except OSError:
+            return None
+    return None
+
+
+def _policy(req: dict):
+    """Decision provider: jev (default) | openai (Decisions API) | chat (any OpenAI-compatible endpoint)."""
+    p = req.get("provider") or {}
+    name = (p.get("name") or os.environ.get("NITROLANE_PROVIDER") or "jev").lower()
+    key = p.get("api_key") or _user_env(p.get("api_key_env") or "")
+    model = p.get("model") or os.environ.get("NITROLANE_MODEL") or None
+    base = p.get("base_url") or os.environ.get("NITROLANE_BASE_URL") or None
+    if name == "jev":
+        return TypeSafeJevPolicy(api_key=key, model=model)
+    from arc_cua.policies import ChoicePolicy
+
+    if name == "openai":
+        from arc_cua.policies._openai_decisions import OpenAIDecisionsTransport
+
+        return ChoicePolicy(OpenAIDecisionsTransport(api_key=key, model=model, base_url=base))
+    if name == "chat":
+        if not model:
+            raise ValueError('provider "chat" needs a model (provider.model or NITROLANE_MODEL)')
+        return ChoicePolicy(ChatChoiceTransport(model, base_url=base or "https://api.openai.com/v1",
+                                                 api_key=key or _user_env("OPENAI_API_KEY")))
+    raise ValueError(f'unknown provider {name!r}; use "jev", "openai" or "chat"')
+
+
+
+
+def _foreground_hwnd() -> int:
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = ctypes.c_void_p
+    return int(user32.GetForegroundWindow() or 0)
+
+
+def _restore_foreground(hwnd: int) -> None:
+    """Give the user's window its focus back after a foreground desktop run."""
+    import ctypes
+
+    if not hwnd:
+        return
+    user32 = ctypes.windll.user32
+    if int(user32.GetForegroundWindow() or 0) == hwnd or not user32.IsWindow(ctypes.c_void_p(hwnd)):
+        return
+    user32.keybd_event(0x12, 0, 0, 0)
+    user32.keybd_event(0x12, 0, 0x0002, 0)
+    user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
+
+
+def _doctor() -> int:
+    """Report whether this machine can run nitrolane; never prints secret values."""
+    checks: dict = {"python": sys.version.split()[0]}
+    try:
+        from arc_cua.backends.cdp import find_chrome
+
+        checks["chrome"] = find_chrome()
+    except Exception as exc:
+        checks["chrome"] = f"missing ({exc})"
+    checks["chrome_cdp_alive"] = _cdp_alive()
+    checks["typesafe_key"] = bool(_user_env("TYPESAFE_API_KEY"))
+    checks["provider"] = os.environ.get("NITROLANE_PROVIDER", "jev (default)")
+    checks["cache_dir"] = str(CACHE_DIR)
+    if sys.platform == "win32":
+        try:
+            from pywinauto import Desktop
+
+            checks["uia_windows"] = len(Desktop(backend="uia").windows())
+        except Exception as exc:
+            checks["uia_windows"] = f"unavailable ({type(exc).__name__})"
+    ok = isinstance(checks["chrome"], str) and not checks["chrome"].startswith("missing") and checks["typesafe_key"]
+    checks["ok"] = bool(ok)
+    print(json.dumps(checks, ensure_ascii=False, indent=1))
+    return 0 if ok else 1
 
 
 def main() -> int:
+    if sys.argv[1:] == ["doctor"]:
+        return _doctor()
     raw = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else sys.stdin.read()
     try:
         req = json.loads(raw)
@@ -206,12 +376,14 @@ def main() -> int:
         print(json.dumps({"type": "error", "error": f"invalid input: {exc}"}))
         return 2
 
-    # 0.45: in our battery every correct action scored >= 0.5, every wrong-target action <= 0.43.
+    # 0.35: multi-field tasks split confidence across equally valid first steps (correct form
+    # SET_VALUE scored 0.33-0.43); the 0.43 wrong-target evidence came from the old 900px viewport.
     # Completions score lower on correct runs (0.38-0.43), hence their own, lower gate.
-    config = RuntimeConfig(timeout_s=req.get("timeout_s", 90), min_confidence=req.get("min_confidence", 0.45),
+    config = RuntimeConfig(timeout_s=req.get("timeout_s", 90), min_confidence=req.get("min_confidence", 0.35),
                            min_completion_confidence=req.get("min_completion_confidence", 0.3),
                            min_margin=req.get("min_margin"))
     t0 = time.perf_counter()
+    user_hwnd = _foreground_hwnd() if target == "desktop" and sys.platform == "win32" else 0
     try:
         if target == "browser":
             from arc_cua.backends import ChromeBackend
@@ -234,20 +406,46 @@ def main() -> int:
         if cache_path and cache_path.exists():
             steps = json.loads(cache_path.read_text(encoding="utf-8"))["steps"]
             try:
-                _replay(backend, steps)
+                _replay(backend, steps, req["subtask"].get("inputs") or {})
                 replayed = True
                 out.update(status="SUBTASK_COMPLETE", reason=None, needs_input=None, actions=len(steps),
                            steps=[f"{s['action']} {s.get('target_name')!r} (replay)" for s in steps], cache="hit")
-            except Exception:
-                out["cache"] = "invalidated"
-                if target == "browser":
-                    backend.navigate(req.get("url", "about:blank"))  # reset partial replay before the model retries
+            except _ReplayFailed as failed:
+                # Delta fallback: the model continues from the state the replay reached.
+                # Only a browser that already navigated/submitted is reset to a clean page.
+                out["cache"] = "delta"
+                if target == "browser" and failed.done > 0:
+                    backend.navigate(req.get("url", "about:blank"))
         if not replayed:
-            result = DesktopExecutor(backend, TypeSafeJevPolicy(), config=config).run(subtask)
+            executor = DesktopExecutor(backend, _policy(req), config=config)
+            transitions = req.get("transitions") or {}
+            violated = None
+            if not transitions:
+                result = executor.run(subtask)
+            else:
+                # Verify expected state after specific actions, not just at the end:
+                # a right-looking screen after the wrong action is a failure (transition, not state).
+                result = None
+                for event in executor.run_iter(subtask):
+                    if event.result is not None:
+                        result = event.result
+                        break
+                    if event.record is not None and str(event.record.step) in transitions:
+                        expr = transitions[str(event.record.step)]
+                        if target == "browser":
+                            ok = bool(backend._call("Runtime.evaluate", {"expression": expr, "returnByValue": True})["result"].get("value"))
+                        else:
+                            ok = any(expr in (e.name or "") or expr in str(e.value or "") for e in event.snapshot.elements)
+                        if not ok:
+                            violated = event.record.step
+                            executor.cancel()
             d = result_to_dict(result)
             history_dicts = d["history"]
             out.update(status=d["status"], reason=d.get("reason"), needs_input=d.get("needs_input"),
                        actions=d.get("actions_taken"), steps=[_step(h, rec) for h, rec in zip(d["history"], result.history)])
+            if violated is not None:
+                out.update(status="NEEDS_AGENT", reason=f"Transition check failed after step {violated}: {transitions[str(violated)]!r}",
+                           transitions={"failed_step": violated})
             if cache_path and "cache" not in out:
                 out["cache"] = "miss"
         t2 = time.perf_counter()
@@ -262,7 +460,7 @@ def main() -> int:
             out["check"] = _text_seen(backend, check)
         if cache_path and out.get("check") is True and not replayed and out.get("status") == "SUBTASK_COMPLETE":
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps({"steps": _recorded_steps(history_dicts)}, ensure_ascii=False), encoding="utf-8")
+            cache_path.write_text(json.dumps({"steps": _recorded_steps(history_dicts, req["subtask"].get("inputs") or {})}, ensure_ascii=False), encoding="utf-8")
             out["cache"] = "stored"
         elif cache_path and replayed and out.get("check") is not True:
             cache_path.unlink(missing_ok=True)  # stale entry; state already changed, so hand back instead of re-running blind
@@ -273,6 +471,8 @@ def main() -> int:
     finally:
         if target == "browser" and not req.get("keep_tab"):
             backend.close()
+        if user_hwnd:
+            _restore_foreground(user_hwnd)
     # Indented: short lines, so tool output is never cut mid-line.
     print(json.dumps(out, ensure_ascii=False, indent=1))
     return 0

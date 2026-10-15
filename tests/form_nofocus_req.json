@@ -1,0 +1,5 @@
+{"target":"desktop","app":{"title":"nitrolane fixture"},
+ "subtask":{"goal":"Enter the customer name, choose the country, and submit the form",
+  "inputs":{"name":"Jürgen","country":"Österreich"},
+  "verification":["The label greets Jürgen from Österreich"],"max_actions":8},
+ "check":"Hallo Jürgen aus Österreich"}

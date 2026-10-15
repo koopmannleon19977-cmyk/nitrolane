@@ -1,0 +1,6 @@
+{"target":"browser","url":"https://en.wikipedia.org",
+ "subtask":{"goal":"Open the Wikipedia article about Alan Turing",
+  "inputs":{"query":"Alan Turing"},
+  "verification":["The article titled Alan Turing is open"],"max_actions":6},
+ "transitions":{"1":"document.title.startsWith('Grace Hopper')"},
+ "check":"document.title.startsWith('Alan Turing')"}

@@ -1,0 +1,6 @@
+{"target":"browser","url":"https://en.wikipedia.org",
+ "provider":{"name":"chat","base_url":"https://api.hcompany.ai/v1","model":"holo4-35b-a3b","api_key_env":"HAI_API_KEY"},
+ "subtask":{"goal":"Open the Wikipedia article about Alan Turing",
+  "inputs":{"query":"Alan Turing"},
+  "verification":["The article titled Alan Turing is open"],"max_actions":6},
+ "check":"document.title.startsWith('Alan Turing')"}

@@ -1,5 +1,5 @@
 diff --git a/src/arc_cua/backends/windows_uia.py b/src/arc_cua/backends/windows_uia.py
-index 400dcc9..1ed862a 100644
+index 400dcc9..59bf90e 100644
 --- a/src/arc_cua/backends/windows_uia.py
 +++ b/src/arc_cua/backends/windows_uia.py
 @@ -48,9 +48,124 @@ def hotkey_sequence(chord: str) -> str:
@@ -181,7 +181,7 @@ index 400dcc9..1ed862a 100644
                          actions.append(ActionKind.SET_VALUE)
                      try:
                          scroll = wrapper.iface_scroll
-@@ -167,19 +299,61 @@ class WindowsUIAAdapter:
+@@ -167,19 +299,96 @@ class WindowsUIAAdapter:
                  errors += 1  # Inaccessible/disappearing controls are not actionable.
          return root.window_text(), rows, {"truncated": bool(pending) or depth_limited, "read_errors": errors}
  
@@ -235,6 +235,41 @@ index 400dcc9..1ed862a 100644
 +            raise ValueError(f"No option matches {value!r}")
 +        combo.select(value)
 +
++    def try_pattern(self, ref: Any, action: ExecutableAction) -> bool:
++        """Act through UIA patterns without foreground/pointer; True when the pattern did the work.
++
++        Invoke/Toggle/SelectionItem/ValuePattern cross process boundaries without input
++        synthesis, so the user's focus and pointer stay untouched. Any doubt returns False
++        and the caller falls back to the foreground path.
++        """
++        if ref is None or action.click_modifier:
++            return False
++        ref = ref.live() if hasattr(ref, "live") else ref
++        try:
++            if action.kind in {ActionKind.SET_VALUE, ActionKind.TYPE_TEXT} \
++                    and ref.element_info.control_type == "ComboBox":
++                self.select_option(ref, str(action.value))
++                return True
++            if action.kind == ActionKind.CLICK:
++                for iface, method in (("iface_invoke", "Invoke"), ("iface_toggle", "Toggle"),
++                                      ("iface_selection_item", "Select")):
++                    try:
++                        getattr(getattr(ref, iface), method)()
++                        return True
++                    except Exception:
++                        continue
++                return False
++            if action.kind in {ActionKind.SET_VALUE, ActionKind.TYPE_TEXT}:
++                pattern = ref.iface_value
++                if pattern.CurrentIsReadOnly:
++                    return False
++                pattern.SetValue(str(action.value))
++                current = str(pattern.CurrentValue).replace("\r\n", "\n").replace("\r", "\n")
++                return current == str(action.value).replace("\r\n", "\n")
++        except Exception:
++            return False
++        return False
++
      def perform(self, hwnd: int, ref: Any, action: ExecutableAction) -> None:
          self.assert_foreground(hwnd)
 +        ref = ref.live() if hasattr(ref, "live") else ref
@@ -245,7 +280,7 @@ index 400dcc9..1ed862a 100644
          if kind in {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}:
              modifier = {None: "", "MOD": "control", "SHIFT": "shift"}[action.click_modifier]
              ref.click_input(button="right" if kind == ActionKind.RIGHT_CLICK else "left",
-@@ -192,9 +366,19 @@ class WindowsUIAAdapter:
+@@ -192,9 +401,19 @@ class WindowsUIAAdapter:
              if not ref.element_info.element.CurrentHasKeyboardFocus:
                  raise TargetUnavailable("Editable control did not receive keyboard focus; no text sent")
              # TYPE_TEXT replaces the field, matching upstream text entry semantics.
@@ -268,11 +303,27 @@ index 400dcc9..1ed862a 100644
          elif kind in {ActionKind.HOTKEY, ActionKind.PRESS_KEY}:
              sequence = hotkey_sequence(action.hotkey) if kind == ActionKind.HOTKEY else key_sequence(action.key)
              # Braced single-letter keys otherwise become Unicode packets, which
-@@ -302,10 +486,11 @@ class WindowsUIABackend:
+@@ -259,6 +478,11 @@ class WindowsUIABackend:
+         current = self.observe()
+         if (snapshot.context.get("pid"), snapshot.context.get("window_id")) != (self.pid, self.window_id):
+             return False
++        if not action.target_id:
++            # Untargeted keys act on focus, not on a snapshot element. Requiring the same
++            # revision made the runtime drop a just-typed TYPE_TEXT from its history when
++            # the follow-up key (TAB/ENTER) arrived after the value landed.
++            return True
+         if snapshot.revision != current.revision:
+             return False
+         if action.target_id:
+@@ -302,10 +526,15 @@ class WindowsUIABackend:
          if kind == ActionKind.WAIT:
              time.sleep(0.05)
              return
 -        self.adapter.foreground(self.pid, self.window_id)
++        if kind in {ActionKind.CLICK, ActionKind.SET_VALUE, ActionKind.TYPE_TEXT} and not action.click_modifier:
++            try_pattern = getattr(self.adapter, "try_pattern", None)
++            if try_pattern is not None and try_pattern(self._refs.get(action.target_id), action):
++                return  # pattern acted cross-process; no foreground activation needed
 +        activated = self.adapter.foreground(self.pid, self.window_id)
          # Activation can change focus, values or layout. Refuse rather than acting
 -        # on the old tree; runtime/clients observe again and retry.
@@ -474,7 +525,7 @@ index 8aaee20..296ef61 100644
  
  def transition(state, action):
 diff --git a/tests/test_windows_uia.py b/tests/test_windows_uia.py
-index 1d32e06..d6c9f4b 100644
+index 1d32e06..6297de6 100644
 --- a/tests/test_windows_uia.py
 +++ b/tests/test_windows_uia.py
 @@ -7,7 +7,6 @@ from arc_cua.backends.windows_uia import (
@@ -485,7 +536,32 @@ index 1d32e06..d6c9f4b 100644
  )
  from arc_cua.errors import ActionNotOffered, InvalidArguments, StaleDesktopState, UnsupportedDesktopAction
  from arc_cua.models import ActionKind as K
-@@ -120,7 +119,6 @@ def test_invalid_actions_never_activate(action, error):
+@@ -59,6 +58,24 @@ def test_observes_named_control_and_exact_window():
+     assert snapshot.elements[0].source == "windows_uia"
+     assert backend.observe().revision == snapshot.revision
+ 
++def test_pattern_first_skips_foreground_and_perform():
++    backend, adapter, snapshot = make()
++    seen = []
++    adapter.try_pattern = lambda ref, action: seen.append((ref, action.kind)) or True
++    backend.execute(snapshot, ExecutableAction(K.CLICK, target_id="uia:1:2"))
++    assert seen and adapter.calls == []  # no foreground activation, no pointer perform
++    adapter.try_pattern = lambda ref, action: False
++    backend.execute(snapshot, ExecutableAction(K.CLICK, target_id="uia:1:2"))
++    assert adapter.calls  # fell back to the foreground path
++
++def test_untargeted_key_is_fresh_despite_revision_change():
++    backend, adapter, snapshot = make()
++    adapter.rows[0]["value"] = "typed"  # the value just landed; revision moved on
++    assert backend.is_fresh(snapshot, ExecutableAction(K.PRESS_KEY, key="TAB"))
++    assert not backend.is_fresh(snapshot, ExecutableAction(K.CLICK, target_id="uia:1:2"))
++
++
++
+ 
+ @pytest.mark.parametrize("field,value", [
+     ("name", "Changed"), ("value", "new"), ("enabled", False), ("visible", False),
+@@ -120,7 +137,6 @@ def test_invalid_actions_never_activate(action, error):
  def test_keyboard_macro_escaping_and_ctrl_mapping():
      assert hotkey_sequence("MOD+A") == "{VK_CONTROL down}{A}{VK_CONTROL up}"
      assert key_sequence("ARROW_DOWN") == "{DOWN}"
@@ -493,7 +569,7 @@ index 1d32e06..d6c9f4b 100644
      with pytest.raises(ValueError):
          hotkey_sequence("CTRL+A; DELETE")
  
-@@ -240,6 +238,7 @@ def native_fake():
+@@ -240,6 +256,7 @@ def native_fake():
      adapter.check_window = lambda pid, hwnd: None
      adapter.assert_foreground = lambda hwnd: None
      adapter.desktop = NS(window=lambda **kwargs: NS(wrapper_object=lambda: root))
@@ -501,7 +577,7 @@ index 1d32e06..d6c9f4b 100644
      adapter.user32 = NS(GetForegroundWindow=lambda: 100)
      sent = []
      adapter.keyboard = NS(send_keys=lambda sequence, **kwargs: sent.append(sequence))
-@@ -258,17 +257,34 @@ def test_native_observation_hides_password_and_reports_truncation():
+@@ -258,17 +275,34 @@ def test_native_observation_hides_password_and_reports_truncation():
      assert len(limited) == 1 and diagnostics["truncated"]
  
  
