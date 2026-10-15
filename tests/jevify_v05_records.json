@@ -1323,14 +1323,16 @@
  "V5_replay_bg_fast": {
   "expected": "complete",
   "req": {
-   "test": "7-click cached calc replay, background, persistent cua session"
+   "test": "7-click cached calc replay, background, persistent cua session",
+   "note": "first measured with Calculator in front; behind the user's window the run takes 3.2 s (0 focus samples)"
   },
   "result": {
    "status": "SUBTASK_COMPLETE",
    "cache": "hit",
    "sec": {
     "run": 1.51
-   }
+   },
+   "check": true
   }
  },
  "V5_mcp_warm": {

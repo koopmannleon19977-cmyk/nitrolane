@@ -40,10 +40,31 @@ correct. Records: `tests/jevify_v05_records.json`.
 |---|---:|---:|
 | 6-field web form + submit | 4.7 s | **1.4 s** |
 | Notepad: set document text | 4.0 s | **0.46 s** |
-| Calculator: 7 button clicks | 6.4 s | **0.74 s** (1.51 s fully in the background) |
+| Calculator: 7 button clicks | 6.4 s | **0.74 s** (3.2 s fully in the background, focus untouched) |
 
 Browser median over the battery: 1.4 s per subtask · desktop median: 5.0 s.
 Reproduce them yourself: `tests/battery.py` (see [Tests](#tests)).
+
+### Head-to-head on the same machine (2026-10-15)
+
+Same task — Windows 11 Calculator, clear then 12 × 12 =, user's own window in front,
+foreground sampled every 10 ms. Scripts and raw results: [`tests/h2h/`](tests/h2h/).
+
+| | Time | Correct | Calculator in front |
+|---|---:|---:|---:|
+| nitrolane cached replay (CLI call, 0 model calls) | **4.8–4.9 s** | 3/3 | **0 samples** |
+| nitrolane with the decision model (7 decisions) | 9.2 s | 1/1 | 0 samples |
+| [terminator-mcp-agent](https://github.com/mediar-ai/terminator) by element id, no model | 46.5–47.5 s (6.6 s per click) | 1/2 (second run: 24) | 3,387–4,485 samples |
+
+[Windows-MCP](https://github.com/CursorTouch/Windows-MCP) could not be measured while the
+machine was in use: it yields to user activity (`CONTROL_PREEMPTED`, ~10 s idle wait) and
+then did not answer within 60 s. One machine, one app, a handful of runs — a smoke
+comparison, not a benchmark.
+
+Decision-model A/B on the battery: `jev-1.14.0` 26/28 vs `jev-1.13.0` (default) 27/28 —
+1.14 solved "7 plus 8" in natural order but handed back both 12 × 12 tasks at low
+confidence; 0 false successes either way. The default `jev-latest` still resolves to 1.13.0
+(checked via the API response); pin with `NITROLANE_MODEL`.
 
 ## Demo
 
@@ -108,7 +129,7 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
   Notepad grab the foreground (271 and 109 foreign-foreground samples at 10 ms);
   through the daemon, which holds no foreground rights, **0 samples** — your window
   never loses focus. One persistent cua-driver session per process with its animated
-  agent cursor switched off: **0.06 s per background click** (0.6 s with the cursor
+  agent cursor switched off: **0.12–0.13 s per background click** (0.6 s with the cursor
   animation, 0.3 s with a CLI process per action). `"background": false` opts out.
   Without cua-driver: pattern-first UIA, foreground restored at the end.
 - **Ordered steps** (`"steps": ["Click 7", "Click plus", ...]`): order-sensitive

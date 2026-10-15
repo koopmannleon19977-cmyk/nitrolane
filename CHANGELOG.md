@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.1 — 2026-10-15
+
+- `app.launch` is skipped when a window with the title is already open: re-launching a
+  single-instance app (Calculator) re-activated it and stole the user's focus even with the
+  background tier (184–197 → 0 foreground samples per cached run).
+- Corrected v0.5.0 background numbers measured with the app behind the user's window:
+  0.12–0.13 s per click, 7-click replay 3.2 s run / 4.9 s end to end.
+- Head-to-head vs terminator-mcp-agent and Windows-MCP, and a jev-1.14.0 vs jev-1.13.0 battery
+  A/B (README, `tests/h2h/`, `tests/last_run_v05_jev114.json`).
+
 ## v0.5.0 — 2026-10-15
 
 Security (all found by an internal review; none reachable before only because nobody used it):
@@ -28,9 +38,12 @@ Correctness:
 
 Speed (measured on the same machine as before):
 - Background clicks: one persistent cua-driver session per process with its animated agent
-  cursor off — 0.06 s per click (was 0.3 s CLI per action; 0.6 s with the cursor animation).
+  cursor off — 0.12–0.13 s per click with the app behind the user's window, 0.06 s when it is
+  in front (was 0.3 s CLI per action; 0.6 s with the cursor animation).
 - UIA settle polls the revision instead of a fixed 0.15 s pause: 7-click cached calculator
-  replay 0.74 s in the foreground, 1.51 s fully in the background (was 2.6 s).
+  replay 0.74 s in the foreground; fully in the background (user's window in front, 0 focus
+  samples) 3.2 s run, 4.9 s end to end as a CLI call (was 2.6 s run, but stealing focus via
+  a redundant `launch` of the already-open app — now skipped when the window exists).
 - MCP server and fleet run subtasks in-process: same cached task 1.66 s per warm MCP call vs
   2.9 s as a fresh process; fleet 4 browser tasks 8.6 s wall vs 15.1 s serial.
 

@@ -1,0 +1,41 @@
+{
+ "tool": "terminator-mcp-agent@latest via npx, invoke_element, process ApplicationFrameHost, selector nativeid:<AutomationId>, no model",
+ "date": "2026-10-15",
+ "machine": "Windows 11, German UI, Calculator",
+ "runs": [
+  {
+   "total_s": 46.5,
+   "per_call_s": [
+    6.664,
+    6.608,
+    6.785,
+    6.582,
+    6.591,
+    6.625,
+    6.649
+   ],
+   "display": "Die Anzeige lautet 144",
+   "target_fg_samples": 4485
+  },
+  {
+   "total_s": 47.49,
+   "per_call_s": [
+    6.721,
+    6.939,
+    6.78,
+    6.881,
+    6.815,
+    6.698,
+    6.653
+   ],
+   "display": "Die Anzeige lautet 24",
+   "target_fg_samples": 3387
+  }
+ ],
+ "also_tried": [
+  "process CalculatorApp: Element not found for every selector form",
+  "window_selector name:Rechner: Element not found after 27.4 s",
+  "name selector with umlaut (Löschen): Element not found"
+ ],
+ "windows_mcp": "uvx windows-mcp serve: Snapshot returned CONTROL_PREEMPTED (yields while the user is active, ~10 s idle wait) and then no answer within 60 s; not measurable while the machine is in use"
+}

@@ -11,7 +11,7 @@ Exit code 0 whenever a result line was printed (whatever its status); 2 invalid 
 """
 from __future__ import annotations
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 import hashlib
 import json
@@ -124,14 +124,18 @@ def _desktop_backend(app: dict):
         return WindowsUIABackend(int(app["pid"]))
     if "title" not in app:  # validate before any side effect
         raise ValueError('desktop app needs "pid" or "title" (with optional "launch")')
+    found = None
     if "launch" in app:
-        # No shell, no inherited pipes (a caller reading our stdout would wait for the app to exit).
-        # Not DETACHED: console hosts (powershell fixtures) exit at once without a console; a hidden
-        # one keeps them alive and leaves GUI apps unaffected.
-        subprocess.Popen(_launch_argv(app["launch"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL,
-                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP)
-    pid, hwnd = _find_window(app["title"], 15 if "launch" in app else 2)
+        try:  # already open: launching again re-activates single-instance apps (measured: Calculator stole focus)
+            found = _find_window(app["title"], 0)
+        except RuntimeError:
+            # No shell, no inherited pipes (a caller reading our stdout would wait for the app to exit).
+            # Not DETACHED: console hosts (powershell fixtures) exit at once without a console; a hidden
+            # one keeps them alive and leaves GUI apps unaffected.
+            subprocess.Popen(_launch_argv(app["launch"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP)
+    pid, hwnd = found or _find_window(app["title"], 15 if "launch" in app else 2)
     import ctypes
 
     user32 = ctypes.windll.user32
