@@ -94,6 +94,19 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
   activation, and your original foreground window is restored when the run ends.
 - **Transition verification**: optional per-step expectations stop a run whose
   intermediate state is wrong — even if the final screen would have looked right.
+- **Parallel fleet** (`nitrolane_fleet.py`): many subtasks in one call — browser tabs
+  run in parallel, desktop tasks stay sequential (one foreground). Measured: 4 wiki
+  tasks in **10.2 s wall instead of 17.0 s serial**.
+- **Demo recorder** (`nitrolane_record.py`): demonstrate a workflow once; nitrolane
+  records clicks (resolved to element names), typed values and drop-down picks as a
+  *parameterized* template and later replays it with new data — verified end to end
+  (4 recorded steps → replay with zero model calls).
+- **OCR last resort** (`ocr_capture.ps1`): for pixels-only UIs (canvas, custom-drawn
+  controls) Windows.Media.Ocr finds the text and clicks it; UIA always wins when it
+  can. Verified clicking a Tk canvas label (2.7 s).
+- **Bring your own browser** (`"cdp": "http://127.0.0.1:9222"`): attach to any Chrome
+  started with `--remote-debugging-port` (e.g. one you are logged into) instead of
+  nitrolane's own profile. Opt-in only — the subtask then acts as that session.
 - **A faster Windows backend** (`patches/`): UIA observation as a single CacheRequest
   subtree fetch (350 ms → 55 ms), exact layout-independent typing
   (ValuePattern first, Unicode `SendInput` fallback), native drop-down selection,

@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.3.0 — 2026-10-15
+
+- **Parallel fleet** (`nitrolane_fleet.py`): batch subtasks; browser in parallel tabs,
+  desktop sequential. Measured 4 wiki tasks: 10.2 s wall vs 17.0 s serial sum.
+- **Demo recorder** (`nitrolane_record.py`): low-level mouse/keyboard hooks record a
+  human demonstration into a *parameterized* template (typed values become inputs,
+  drop-down picks become SET_VALUE, combo-open clicks dropped). Proof: 4 recorded
+  steps replayed model-free on a fresh window (`cache: hit`).
+- **OCR last resort** (`ocr_capture.ps1` + `"ocr"` in a desktop request):
+  Windows.Media.Ocr locates text pixels and clicks it, with optional OCR post-check.
+  Verified on a UIA-blind Tk canvas (2.7 s).
+- **Bring your own browser**: `"cdp": "<endpoint>"` attaches to any
+  `--remote-debugging-port` Chrome (logged-in sessions, opt-in); proof test included.
+- **Engine A/B** (`tests/engine_ab.py`): Chrome 3/3, Moli 3/3 on the same tasks;
+  Chrome faster on all three → Chrome stays the default.
+- **Benchmark v2** (`tests/bench.py`): adds parameter-replay, cached desktop and fleet
+  rows, writes `bench_result.md`. Medians (2 runs): form 4.92 s model / 1.28 s replay,
+  parameter replay 1.33 s, wiki 3.16 s, Notepad 1.96 s, Calculator 3.19 s / 1.60 s
+  cached, fleet 4/4 in 10.19 s.
+- Fork fix in `patches/`: transient-UIA-read retry — a dropdown/dialog transition
+  could raise COMError and abort a run.
+- Verification: 41 records judged (battery + P1 features) → 33 verified successes,
+  7 correct handbacks, 1 known miss (natural-order calculator task), 0 false
+  successes, 0 constraint violations.
+
 ## v0.2.0 — 2026-10-15
 
 - **Provider freedom**: decision provider is pluggable — TypeSafe JEV (default),

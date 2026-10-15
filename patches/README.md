@@ -16,6 +16,7 @@ measured battery run failed without it — the "why" column is the measurement.
 | `policies/choice.py`, `safety.py` | Risky controls stay offered; the runtime still refuses them (NEEDS_AGENT naming the risk) | Hidden "Delete account" made JEV click "Save note" instead; hidden "Send me product updates" looped into BLOCKED |
 | `backends/windows_uia.py` | Pattern-first execution: CLICK/SET_VALUE/TYPE_TEXT try Invoke/Toggle/SelectionItem/ValuePattern (incl. ComboBox select) before any foreground activation or pointer input | Calculator buttons act via InvokePattern with no pointer movement; the wrapper also restores the user's foreground window after desktop runs (UWP apps still self-activate on Invoke — measured OS behavior) |
 | `backends/windows_uia.py` | Untargeted keys (PRESS_KEY/HOTKEY) skip the snapshot-revision guard in `is_fresh` | The TAB/ENTER after a TYPE_TEXT arrived after the value landed, so the runtime treated the cycle as stale and dropped the executed typing from its history (and from recorded replay trajectories) |
+| `backends/windows_uia.py` | `read` retries the cached UIA root fetch (3×, 0.3 s) | A drop-down/dialog transition could raise COMError and abort the whole run (hit during recorder playback) |
 | `tests/…`, `tests/golden/…` | Tests for the above; goldens regenerated (`ARC_UPDATE_GOLDEN=1`) | |
 
 After pulling upstream: re-apply, run `python -m pytest -q`, then the nitrolane battery.

@@ -362,13 +362,79 @@ def _doctor() -> int:
     return 0 if ok else 1
 
 
+def _ocr_lines(backend) -> tuple[dict, object]:
+    """Screenshot the target window and OCR it (Windows.Media.Ocr via ocr_capture.ps1)."""
+    import tempfile
+
+    from pywinauto import Desktop
+
+    backend.observe()  # resolves window_id
+    rect = Desktop(backend="uia").window(handle=backend.window_id).rectangle()
+    png = Path(tempfile.gettempdir()) / "nitrolane_ocr.png"
+    proc = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                           str(Path(__file__).parent / "ocr_capture.ps1"),
+                           "-X", str(rect.left), "-Y", str(rect.top), "-W", str(rect.width()),
+                           "-H", str(rect.height()), "-Png", str(png)],
+                          capture_output=True, text=True, encoding="utf-8", timeout=120)
+    if proc.returncode:
+        raise RuntimeError(f"OCR failed: {proc.stderr[-300:]}")
+    return json.loads(proc.stdout), rect
+
+
+def _ocr_find(data: dict, needle: str) -> tuple[float, float] | None:
+    """Center (image coordinates) of the first OCR line containing `needle`, else None."""
+    want = " ".join(needle.lower().split())
+    for line in data.get("lines", []):
+        if want in " ".join(line["text"].lower().split()) and line["words"]:
+            x0 = min(w["x"] for w in line["words"])
+            x1 = max(w["x"] + w["w"] for w in line["words"])
+            y0 = min(w["y"] for w in line["words"])
+            y1 = max(w["y"] + w["h"] for w in line["words"])
+            return (x0 + x1) / 2, (y0 + y1) / 2
+    return None
+
+
+def _ocr_action(backend, req: dict) -> dict:
+    """Last-resort path for pixels-only UIs: find text by OCR and click it. UIA stays first choice."""
+    import ctypes
+
+    ocr = req["ocr"]
+    text = ocr["text"]
+    data, rect = _ocr_lines(backend)
+    hit = _ocr_find(data, text)
+    if hit is None:
+        return {"status": "NEEDS_AGENT", "reason": f"OCR did not find {text!r}", "steps": [],
+                "ocr": {"lines": len(data.get("lines", []))}}
+    steps = []
+    if ocr.get("action", "click") == "click":
+        x = int(rect.left + hit[0] * (rect.width() / data["width"]))
+        y = int(rect.top + hit[1] * (rect.height() / data["height"]))
+        backend.adapter.foreground(backend.pid, backend.window_id)
+        user32 = ctypes.windll.user32
+        pos = ctypes.wintypes.POINT() if hasattr(ctypes, "wintypes") else None
+        user32.SetCursorPos(x, y)
+        user32.mouse_event(0x0002, 0, 0, 0, 0)
+        user32.mouse_event(0x0004, 0, 0, 0, 0)
+        steps.append(f"OCR_CLICK {text!r} @{x},{y}")
+        time.sleep(0.5)
+    result: dict = {"status": "SUBTASK_COMPLETE", "reason": None, "needs_input": None,
+                    "actions": len(steps), "steps": steps, "ocr": {"found": text, "lines": len(data.get("lines", []))}}
+    if ocr.get("check_text"):
+        data2, _ = _ocr_lines(backend)
+        result["check"] = _ocr_find(data2, ocr["check_text"]) is not None
+        if not result["check"]:
+            result.update(status="NEEDS_AGENT", reason=f"OCR check text not found after action: {ocr['check_text']!r}")
+    elif req.get("check"):
+        result["check"] = _text_seen(backend, req["check"])
+    return result
 def main() -> int:
     if sys.argv[1:] == ["doctor"]:
         return _doctor()
     raw = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else sys.stdin.read()
     try:
         req = json.loads(raw)
-        subtask = subtask_from_dict(req["subtask"])
+        subtask = subtask_from_dict(req.get("subtask") or {"goal": f"OCR action on {req['ocr']['text']!r}",
+                                                            "verification": ["The OCR action completed"]})
         target = req["target"]
         if target not in ("browser", "desktop"):
             raise ValueError('target must be "browser" or "desktop"')
@@ -388,8 +454,15 @@ def main() -> int:
         if target == "browser":
             from arc_cua.backends import ChromeBackend
 
-            _ensure_chrome(bool(req.get("headed")))
-            backend = ChromeBackend.connect(CDP, url=req.get("url", "about:blank"))
+            # "cdp": attach to an already-running Chrome (--remote-debugging-port) instead of
+            # nitrolane's own warm instance — e.g. a browser the user is logged into. Opt-in only:
+            # that browser's tabs and session are the user's, so the subtask acts as them.
+            endpoint = req.get("cdp")
+            if endpoint:
+                backend = ChromeBackend.connect(endpoint, url=req.get("url", "about:blank"))
+            else:
+                _ensure_chrome(bool(req.get("headed")))
+                backend = ChromeBackend.connect(CDP, url=req.get("url", "about:blank"))
         else:
             backend = _desktop_backend(req.get("app") or {})
     except Exception as exc:  # setup failures are reported, never raised into the caller's shell
@@ -398,10 +471,15 @@ def main() -> int:
 
     t1 = time.perf_counter()
     out: dict = {"type": "result", "target": target}
+
     try:
         check = req.get("check")
+        handled = False
+        if target == "desktop" and req.get("ocr"):
+            out.update(_ocr_action(backend, req))
+            handled = True
         # Cache only verified work: no independent check, no recording and no replay.
-        cache_path = _cache_path(req) if req.get("cache") and check else None
+        cache_path = _cache_path(req) if req.get("cache") and check and not handled else None
         replayed, history_dicts = False, []
         if cache_path and cache_path.exists():
             steps = json.loads(cache_path.read_text(encoding="utf-8"))["steps"]
@@ -416,7 +494,7 @@ def main() -> int:
                 out["cache"] = "delta"
                 if target == "browser" and failed.done > 0:
                     backend.navigate(req.get("url", "about:blank"))
-        if not replayed:
+        if not replayed and not handled:
             executor = DesktopExecutor(backend, _policy(req), config=config)
             transitions = req.get("transitions") or {}
             violated = None
@@ -456,7 +534,7 @@ def main() -> int:
                 out["check"] = bool(ev(check))
             if req.get("extract"):  # read the resulting page in the same call instead of a second run
                 out["extract"] = ev(req["extract"])
-        elif check:
+        elif check and not handled:
             out["check"] = _text_seen(backend, check)
         if cache_path and out.get("check") is True and not replayed and out.get("status") == "SUBTASK_COMPLETE":
             CACHE_DIR.mkdir(parents=True, exist_ok=True)

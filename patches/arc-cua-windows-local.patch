@@ -1,5 +1,5 @@
 diff --git a/src/arc_cua/backends/windows_uia.py b/src/arc_cua/backends/windows_uia.py
-index 400dcc9..59bf90e 100644
+index 400dcc9..6755c11 100644
 --- a/src/arc_cua/backends/windows_uia.py
 +++ b/src/arc_cua/backends/windows_uia.py
 @@ -48,9 +48,124 @@ def hotkey_sequence(chord: str) -> str:
@@ -138,7 +138,7 @@ index 400dcc9..59bf90e 100644
  
      def windows(self, pid: int | None = None) -> list[dict[str, Any]]:
          result = []
-@@ -107,9 +223,23 @@ class WindowsUIAAdapter:
+@@ -107,9 +223,30 @@ class WindowsUIAAdapter:
          if self.user32.IsIconic(hwnd):
              raise TargetUnavailable("Restore the target window before using the Windows MVP")
  
@@ -159,11 +159,18 @@ index 400dcc9..59bf90e 100644
      def read(self, pid: int, hwnd: int, limit: int) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
          self.check_window(pid, hwnd)
 -        root = self.desktop.window(handle=hwnd).wrapper_object()
-+        root = self._root(hwnd)
++        for attempt in range(3):
++            try:
++                root = self._root(hwnd)
++                break
++            except Exception:  # UIA can fail transiently while the window transitions (dropdown, dialog)
++                if attempt == 2:
++                    raise
++                time.sleep(0.3)
          if not root.is_visible():
              raise TargetUnavailable("Target window is hidden")
          rows: list[dict[str, Any]] = []
-@@ -137,6 +267,8 @@ class WindowsUIAAdapter:
+@@ -137,6 +274,8 @@ class WindowsUIAAdapter:
                      writable = not bool(pattern.CurrentIsReadOnly)
                      if not password:
                          value = pattern.CurrentValue
@@ -172,7 +179,7 @@ index 400dcc9..59bf90e 100644
                  except Exception:
                      pass  # ValuePattern is optional.
                  actions = []
-@@ -144,7 +276,7 @@ class WindowsUIAAdapter:
+@@ -144,7 +283,7 @@ class WindowsUIAAdapter:
                      actions = [ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK]
                      if writable or (info.control_type == "Edit" and info.element.CurrentIsKeyboardFocusable):
                          actions.append(ActionKind.TYPE_TEXT)
@@ -181,7 +188,7 @@ index 400dcc9..59bf90e 100644
                          actions.append(ActionKind.SET_VALUE)
                      try:
                          scroll = wrapper.iface_scroll
-@@ -167,19 +299,96 @@ class WindowsUIAAdapter:
+@@ -167,19 +306,96 @@ class WindowsUIAAdapter:
                  errors += 1  # Inaccessible/disappearing controls are not actionable.
          return root.window_text(), rows, {"truncated": bool(pending) or depth_limited, "read_errors": errors}
  
@@ -280,7 +287,7 @@ index 400dcc9..59bf90e 100644
          if kind in {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}:
              modifier = {None: "", "MOD": "control", "SHIFT": "shift"}[action.click_modifier]
              ref.click_input(button="right" if kind == ActionKind.RIGHT_CLICK else "left",
-@@ -192,9 +401,19 @@ class WindowsUIAAdapter:
+@@ -192,9 +408,19 @@ class WindowsUIAAdapter:
              if not ref.element_info.element.CurrentHasKeyboardFocus:
                  raise TargetUnavailable("Editable control did not receive keyboard focus; no text sent")
              # TYPE_TEXT replaces the field, matching upstream text entry semantics.
@@ -303,7 +310,7 @@ index 400dcc9..59bf90e 100644
          elif kind in {ActionKind.HOTKEY, ActionKind.PRESS_KEY}:
              sequence = hotkey_sequence(action.hotkey) if kind == ActionKind.HOTKEY else key_sequence(action.key)
              # Braced single-letter keys otherwise become Unicode packets, which
-@@ -259,6 +478,11 @@ class WindowsUIABackend:
+@@ -259,6 +485,11 @@ class WindowsUIABackend:
          current = self.observe()
          if (snapshot.context.get("pid"), snapshot.context.get("window_id")) != (self.pid, self.window_id):
              return False
@@ -315,7 +322,7 @@ index 400dcc9..59bf90e 100644
          if snapshot.revision != current.revision:
              return False
          if action.target_id:
-@@ -302,10 +526,15 @@ class WindowsUIABackend:
+@@ -302,10 +533,15 @@ class WindowsUIABackend:
          if kind == ActionKind.WAIT:
              time.sleep(0.05)
              return
