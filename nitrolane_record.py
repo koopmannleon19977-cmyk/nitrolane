@@ -45,6 +45,8 @@ def main() -> int:
     ap.add_argument("--out", default="recorded_request.json")
     ap.add_argument("--goal", default="Replay the recorded demonstration")
     ap.add_argument("--check", default=None, help="desktop check text for the generated request")
+    ap.add_argument("--keep-values", action="store_true",
+                    help="also save the demonstrated values in --out (off: inputs saved empty)")
     args = ap.parse_args()
 
     win = next(w for w in Desktop(backend="uia").windows() if args.title in (w.window_text() or ""))
@@ -110,8 +112,10 @@ def main() -> int:
         name = held_combo["name"]
         current = combo_values.get(name, "")
         if current != held_combo["before"]:
+            key_name = f"choice{len(inputs) + 1}"
+            inputs[key_name] = current
             steps.append({"action": "SET_VALUE", "target_name": name,
-                          "target_bounds": held_combo["step"]["target_bounds"], "value": current,
+                          "target_bounds": held_combo["step"]["target_bounds"], "value": {"$input": key_name},
                           "key": None, "hotkey": None, "click_modifier": None, "scroll_direction": None})
             print(f"  SET_VALUE {name!r} = {current!r}", flush=True)
             held_combo = None
@@ -208,8 +212,10 @@ def main() -> int:
                     held_combo = {"name": name, "before": combo_values.get(name, ""), "step": step}
                 elif role == "ListItem" and last_combo["name"]:
                     # A drop-down pick replays cleanly as SET_VALUE on the combo, not as a popup click.
+                    key_name = f"choice{len(inputs) + 1}"
+                    inputs[key_name] = name
                     steps.append({"action": "SET_VALUE", "target_name": last_combo["name"], "target_bounds": bounds,
-                                  "value": name, "key": None, "hotkey": None,
+                                  "value": {"$input": key_name}, "key": None, "hotkey": None,
                                   "click_modifier": None, "scroll_direction": None})
                     held_combo = None
                     print(f"  SET_VALUE {last_combo['name']!r} = {name!r}", flush=True)
@@ -229,15 +235,22 @@ def main() -> int:
              if not (s["action"] == "CLICK" and i + 1 < len(steps)
                      and steps[i + 1]["action"] == "SET_VALUE" and steps[i + 1]["target_name"] == s["target_name"])]
 
+    # Typed text and picks become inputs, never template literals. The request file keeps them only
+    # with --keep-values: a demo can contain tokens or personal data (password fields are never read).
     request = {"target": "desktop", "app": {"title": title},
-               "subtask": {"goal": args.goal, "inputs": inputs,
+               "subtask": {"goal": args.goal,
+                           "inputs": inputs if args.keep_values else {k: "" for k in inputs},
                            "verification": ["The recorded workflow completed"]},
                "cache": True}
     if args.check:
         request["check"] = args.check
     Path(args.out).write_text(json.dumps(request, ensure_ascii=False, indent=1), encoding="utf-8")
+    if inputs and not args.keep_values:
+        print(f"Recorded values not saved; fill {sorted(inputs)} in {args.out} before replaying "
+              f"(or record with --keep-values).")
     if args.check:  # lane cache requires an independent check
-        path = lane._cache_path(request)
+        # Identity from the real values: they templatize the check text exactly as at replay time.
+        path = lane._cache_path({**request, "subtask": {**request["subtask"], "inputs": inputs}})
         lane.CACHE_DIR.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"steps": steps}, ensure_ascii=False), encoding="utf-8")
         print(f"Template installed: {path}")

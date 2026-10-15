@@ -6,6 +6,7 @@ Writes tests/last_run.json ({id: {expected, req, result}}) for jevify judging wi
 Desktop tasks take over mouse/keyboard focus while they run.
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -14,6 +15,9 @@ from pathlib import Path
 HERE = Path(__file__).parent
 LANE = HERE.parent / "nitrolane.py"
 spec = json.loads((HERE / "battery.json").read_text(encoding="utf-8").replace("{TESTS}", str(HERE).replace("\\", "\\\\")))
+# The battery's own fixture commands are the only extra launches it needs (nitrolane refuses others).
+os.environ["NITROLANE_LAUNCH_ALLOW"] = ";".join({t["req"]["app"]["launch"] for t in spec["tasks"].values()
+                                                 if "launch" in t["req"].get("app", {})})
 prefixes = sys.argv[1:]
 results = {}
 for tid, task in spec["tasks"].items():

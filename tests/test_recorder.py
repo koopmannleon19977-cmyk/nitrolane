@@ -62,7 +62,14 @@ kill_fixtures()
 
 # --- replay the generated request on a fresh form ---
 launch_form()
-req = OUT.read_text(encoding="utf-8")
+req = json.loads(OUT.read_text(encoding="utf-8"))
+saved = req["subtask"]["inputs"]
+assert saved and all(v == "" for v in saved.values()), f"demo values leaked into the request file: {saved}"
+# The caller supplies the values at replay time (here: the demonstrated ones, so the check holds).
+text_key = next(k for k in saved if k.startswith("text"))
+choice_key = next(k for k in saved if k.startswith("choice"))
+req["subtask"]["inputs"] = {text_key: "Jürgen", choice_key: "Österreich"}
+req = json.dumps(req, ensure_ascii=False)
 proc = subprocess.run([sys.executable, str(LANE)], input=req, capture_output=True, text=True, encoding="utf-8", timeout=180)
 result = json.loads(proc.stdout)
 print(result["status"], result.get("cache"), result.get("check"), result.get("steps"))

@@ -22,18 +22,18 @@ LANE="$HOME/nitrolane/nitrolane.py"
 EOF
 ```
 
-- `target:"browser"`: eigenes headless Chrome (Profil `%LOCALAPPDATA%\nitrolane`, Port 9333, Viewport 1280×2400), bleibt warm; nie das Chrome des Users. `"headed":true` nur beim Kaltstart wirksam.
-- `target:"desktop"`: `app` = `{"title":"<Teil des Fenstertitels>"}` (optional `"launch":"calc.exe"`) oder `{"pid":N}`. Mit `cua-driver` im PATH laufen Klicks/Werte auf eindeutig benannten Elementen im Hintergrund (gemessen 0 Fokuswechsel bei Rechner und Notepad, ~0,3 s/Aktion mehr; `"background":false` schaltet ab). Tasten und unbenannte/mehrdeutige Ziele brauchen kurz den Vordergrund; das Fenster des Users wird am Ende wiederhergestellt.
-- `check` (Browser: JS-Ausdruck; Desktop: Text, der danach in Name/Wert eines Elements steht) unabhängig vom Modell prüfen lassen und immer mitgeben; Ergebnis in `"check"`. `extract` (Browser) liefert zusätzlich den Wert eines JS-Ausdrucks von der Ergebnis-Seite — Lesen und Prüfen im selben Aufruf. Niemals denselben Subtask erneut ausführen, nur um zu prüfen.
+- `target:"browser"`: eigenes headless Chrome (Profil `%LOCALAPPDATA%\nitrolane`, zufälliger DevTools-Port, Viewport 1280×2400), bleibt warm; nie das Chrome des Users. `"headed":true` nur beim Kaltstart wirksam.
+- `target:"desktop"`: `app` = `{"title":"<Teil des Fenstertitels>"}` (optional `"launch":"calc.exe"`) oder `{"pid":N}`. `launch` startet ohne Shell nur notepad/calc/mspaint oder exakt in der User-Variable `NITROLANE_LAUNCH_ALLOW` (`;`-getrennt) gelistete Befehlszeilen. Mit `cua-driver` im PATH laufen Klicks/Werte auf eindeutig benannten Elementen im Hintergrund (gemessen 0 Fokuswechsel bei Rechner und Notepad, ~0,06 s/Klick; `"background":false` schaltet ab). Tasten und unbenannte/mehrdeutige Ziele brauchen kurz den Vordergrund; das Fenster des Users wird am Ende wiederhergestellt.
+- `check` (Browser: JS-Ausdruck; Desktop: Text, der danach als ganze Wörter in Name/Wert eines Elements steht — „lautet 15“ passt nicht auf „156“) unabhängig vom Modell prüfen lassen und immer mitgeben; Ergebnis in `"check"`. Galt der Desktop-Check schon vor dem Lauf, steht `check_before:true` im Ergebnis und es wird nichts gecacht. `extract` (Browser) liefert zusätzlich den Wert eines JS-Ausdrucks von der Ergebnis-Seite. Niemals denselben Subtask erneut ausführen, nur um zu prüfen.
 - Optionen: `timeout_s` (90), `min_confidence` (0.35), `min_completion_confidence` (0.3), `min_margin`, `keep_tab`, `cache`, `provider`, `transitions`, `steps`, `background`.
 - `"cache":true` (nur mit `check`): verifizierte Trajektorie wird als parametrisiertes Template gespeichert (Input-Werte als Variablen) und bei gleicher Aufgabe — auch mit anderen Eingabewerten — ohne Modell-Calls replayt (`cache: hit|stored|healed|rebuilt|stale|delta`). Umbenannte/übersetzte Elemente heilt eine Einzelentscheidung pro Schritt (`healed`, gemessen 3,7 s, danach wieder 2,6 s ohne Modell); nicht heilbare Schritte vollendet das Modell und das Template wird neu geschrieben (`rebuilt`). Schlägt der Check nach Replay fehl, wird der Eintrag gelöscht und NEEDS_AGENT gemeldet.
-- `provider`: `{"name":"jev"}` (Standard) oder `{"name":"chat","model":"…","base_url":"…","api_key_env":"…"}` für jeden OpenAI-kompatiblen Endpoint (OpenAI/OpenRouter/Ollama/LM Studio), oder `{"name":"openai"}` für die OpenAI Decisions API. Env: `NITROLANE_PROVIDER/MODEL/BASE_URL`.
+- `provider`: `{"name":"jev"}` (Standard), `{"name":"chat","model":"…"}` für jeden OpenAI-kompatiblen Endpoint oder `{"name":"openai"}` für die OpenAI Decisions API. Endpoint und Key nie im Request (`base_url`/`api_key`/`api_key_env` werden abgelehnt), nur per Env: `NITROLANE_PROVIDER/MODEL/BASE_URL/API_KEY`.
 - `transitions`: `{"<Schrittnummer>":"<Check-Ausdruck>"}` — erwarteter Zustand nach genau dieser Aktion; Verletzung stoppt mit NEEDS_AGENT, auch wenn der Endzustand gut aussähe.
 - Desktop-Läufe stellen das ursprüngliche Vordergrundfenster des Users am Ende wieder her. `nitrolane.py doctor` prüft die Maschine; `nitrolane_mcp.py` stellt `nitrolane_run`/`nitrolane_doctor` als MCP-Tools bereit.
-- **Fleet** für mehrere Aufgaben in einem Aufruf: `nitrolane_fleet.py` mit `{"parallel":4,"tasks":[…]}` — Browser-Tabs parallel, Desktop-Aufgaben seriell (ein Vordergrund). Gemessen: 4 Wiki-Aufgaben 10,2 s statt 17,0 s seriell.
-- **Recorder**: `nitrolane_record.py --title "<Fenster>" --seconds 30 --out wf.json --goal "…" --check "…"` zeichnet eine echte Demonstration auf (Klicks als Elementnamen, getippte Werte als Input-Variablen, Dropdown-Wahl als SET_VALUE) und installiert sie als Replay-Template; danach `nitrolane.py < wf.json` — ohne Modell-Calls, auch mit neuen Eingabewerten.
+- **Fleet** für mehrere Aufgaben in einem Aufruf: `nitrolane_fleet.py` mit `{"parallel":4,"task_timeout_s":300,"tasks":[…]}` — Browser-Tabs parallel, Desktop-Aufgaben seriell; zu lange Browser-Aufgaben kommen als `TIMEOUT`, die übrigen Ergebnisse bleiben. Gemessen: 4 Wiki-Aufgaben 8,6 s statt 15,1 s seriell.
+- **Recorder**: `nitrolane_record.py --title "<Fenster>" --seconds 30 --out wf.json --goal "…" --check "…"` zeichnet eine echte Demonstration auf (Klicks als Elementnamen, getippte Werte und Dropdown-Wahl als Input-Variablen) und installiert sie als Replay-Template. Die vorgeführten Werte stehen nicht in `wf.json` (nur mit `--keep-values`): `inputs` vor dem Replay füllen, dann `nitrolane.py < wf.json` — ohne Modell-Calls.
 - **OCR-Notpfad** für reine Pixel-UIs: Desktop-Request mit `"ocr":{"text":"Start Mission","action":"click","check_text":"Mission Done"}`; UIA hat immer Vorrang, OCR greift nur, wenn kein Element gefunden wird.
-- **Fremdes Chrome** (eingeloggte Session): `"cdp":"http://127.0.0.1:9222"` statt eigenem Profil — nur auf ausdrücklichen Auftrag, die Spur handelt dann als dieser Login.
+- **Fremdes Chrome** (eingeloggte Session): `"cdp":"http://127.0.0.1:9222"` statt eigenem Profil — nur Loopback, nur auf ausdrücklichen Auftrag, die Spur handelt dann als dieser Login.
 
 ## Ergebnis lesen
 
@@ -55,9 +55,9 @@ EOF
 - Risiko-Wörter wirken auf ganze Wörter im Label, auch falsch-positiv: Checkbox „Send me product updates“ braucht `allowed_risks:["send"]`.
 - Nicht für: Logins/2FA/Zahlung, Uploads, Drag&Drop, Canvas/Spiele, Cross-Origin-iframes, minimierte/gesperrte/elevated Fenster.
 
-## Messwerte (Win 11, 2026-10-15, Battery 28 Läufe + 11 Feature-Läufe, jevify-geprüft)
+## Messwerte (Win 11, 2026-10-15, v0.5: Battery 28 Läufe + 14 Feature-Läufe, jevify-geprüft)
 
-38/39 korrekt (32 verifiziert erledigt, 6 korrekte Rückgaben, 0 Falsch-Erfolge, 0 Regelverstöße); einziger Fehlgriff: „7 plus 8“ als reines Ziel (mit `steps` 3/3). Laufzeit: Link/Artikel 1–3 s, Formular mit 6 Feldern 4,8–5,1 s, Notepad-Text 2,2 s, 7 Rechner-Klicks 6,5 s, zzgl. ~0,7 s Prozessstart und 0,5–1,5 s Seitenladen.
+41/42 korrekt (31 verifiziert erledigt, 10 korrekte Rückgaben inkl. abgelehnter Shell-/Key-/Remote-CDP-Requests, 0 Falsch-Erfolge, 0 Regelverstöße); einziger Fehlgriff: „7 plus 8“ als reines Ziel (mit `steps` 3/3). Laufzeit: Link/Artikel 1–3 s, Formular mit 6 Feldern 4,6–5,1 s, Notepad-Text 2,8 s, 7 Rechner-Klicks 6,5 s mit Modell, 0,74 s als Replay (1,51 s komplett im Hintergrund), zzgl. ~0,7 s Prozessstart (entfällt im MCP-Server: 1,66 s statt 2,9 s pro warmem Aufruf) und 0,5–1,5 s Seitenladen.
 
 ## Wartung
 

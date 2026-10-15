@@ -2,16 +2,23 @@
 
 Run with the venv python next to nitrolane.py, e.g.:
     vendor/arc-cua-windows/.venv/Scripts/python.exe nitrolane_mcp.py
+
+Subtasks run inside this long-lived process: the arc-cua stack and the warm-Chrome lookup are
+loaded once instead of paying a fresh interpreter start per call.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
-import subprocess
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).parent
-LANE = HERE / "nitrolane.py"
+sys.path.insert(0, str(Path(__file__).parent))
+import nitrolane as lane  # noqa: E402
+
+# Protocol revisions this server speaks; the client's choice wins when we know it.
+PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 
 TOOLS = [
     {"name": "nitrolane_run",
@@ -27,10 +34,14 @@ TOOLS = [
 
 
 def _run_lane(args: list[str], payload: dict | None) -> str:
-    proc = subprocess.run([sys.executable, str(LANE), *args],
-                          input=json.dumps(payload) if payload is not None else None,
-                          capture_output=True, text=True, encoding="utf-8", timeout=600)
-    return proc.stdout or proc.stderr[-1000:]
+    # Anything the lane or its backends print must not reach stdout: that is the JSON-RPC channel.
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        if args == ["doctor"]:
+            lane._doctor([])
+            return buf.getvalue()
+        out, _ = lane.run(payload)
+    return json.dumps(out, ensure_ascii=False, indent=1)
 
 
 def _reply(mid, result=None, error=None) -> None:
@@ -53,8 +64,10 @@ def main() -> int:
             continue
         try:
             if method == "initialize":
-                _reply(mid, {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}},
-                             "serverInfo": {"name": "nitrolane", "version": "0.2.0"}})
+                asked = (req.get("params") or {}).get("protocolVersion")
+                _reply(mid, {"protocolVersion": asked if asked in PROTOCOLS else PROTOCOLS[0],
+                             "capabilities": {"tools": {}},
+                             "serverInfo": {"name": "nitrolane", "version": lane.__version__}})
             elif method == "ping":
                 _reply(mid, {})
             elif method == "tools/list":

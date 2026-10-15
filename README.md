@@ -9,7 +9,7 @@
 *verified* JSON result out. Instead of paying a frontier LLM for every click,
 nitrolane lets a decision model (TypeSafe JEV) choose each action from the elements
 the UI actually offers — ~0.3 s per decision, no screenshots, no invented text.
-Anything it has done once and verified, it replays later with **zero model calls**.
+Anything it has done once and verified, it replays later — a clean replay costs **zero model calls**.
 
 ```text
 planner (you / any LLM)                nitrolane                     UI
@@ -32,13 +32,15 @@ UI state, Windows 11, 2026-10-15, judged with a frozen rubric):
 | False success | **0** |
 | Constraint violation | **0** |
 
-Plus 11 v0.4 feature runs (background focus, self-healing, ordered steps): all verified.
+Plus 14 v0.5 feature runs (refused shell/key-redirect/remote-CDP requests, recorder
+redaction, background focus, self-healing, warm MCP calls, fleet timeout): all judged
+correct. Records: `tests/jevify_v05_records.json`.
 
 | Task | Model loop | Replay (0 model calls) |
 |---|---:|---:|
 | 6-field web form + submit | 4.7 s | **1.4 s** |
 | Notepad: set document text | 4.0 s | **0.46 s** |
-| Calculator: 7 button clicks | 6.4 s | **3.8 s** |
+| Calculator: 7 button clicks | 6.4 s | **0.74 s** (1.51 s fully in the background) |
 
 Browser median over the battery: 1.4 s per subtask · desktop median: 5.0 s.
 Reproduce them yourself: `tests/battery.py` (see [Tests](#tests)).
@@ -105,7 +107,9 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
   Measured: the same UIA Invoke from nitrolane's own process let Calculator and
   Notepad grab the foreground (271 and 109 foreign-foreground samples at 10 ms);
   through the daemon, which holds no foreground rights, **0 samples** — your window
-  never loses focus. Costs ~0.3 s per action; `"background": false` opts out.
+  never loses focus. One persistent cua-driver session per process with its animated
+  agent cursor switched off: **0.06 s per background click** (0.6 s with the cursor
+  animation, 0.3 s with a CLI process per action). `"background": false` opts out.
   Without cua-driver: pattern-first UIA, foreground restored at the end.
 - **Ordered steps** (`"steps": ["Click 7", "Click plus", ...]`): order-sensitive
   goals run as one decision per step. Measured: "7 plus 8" as a plain goal 0/3
@@ -114,18 +118,20 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
 - **Transition verification**: optional per-step expectations stop a run whose
   intermediate state is wrong — even if the final screen would have looked right.
 - **Parallel fleet** (`nitrolane_fleet.py`): many subtasks in one call — browser tabs
-  run in parallel, desktop tasks stay sequential (one foreground). Measured: 4 wiki
-  tasks in **10.2 s wall instead of 17.0 s serial**.
+  run in parallel, desktop tasks stay sequential (one foreground), all in one process.
+  Measured: 4 wiki tasks in **8.6 s wall instead of 15.1 s serial**.
 - **Demo recorder** (`nitrolane_record.py`): demonstrate a workflow once; nitrolane
   records clicks (resolved to element names), typed values and drop-down picks as a
   *parameterized* template and later replays it with new data — verified end to end
-  (4 recorded steps → replay with zero model calls).
+  (4 recorded steps → replay with zero model calls). Demonstrated values are not
+  written to disk unless you pass `--keep-values`; you supply them at replay time.
 - **OCR last resort** (`ocr_capture.ps1`): for pixels-only UIs (canvas, custom-drawn
   controls) Windows.Media.Ocr finds the text and clicks it; UIA always wins when it
   can. Verified clicking a Tk canvas label (2.7 s).
 - **Bring your own browser** (`"cdp": "http://127.0.0.1:9222"`): attach to any Chrome
-  started with `--remote-debugging-port` (e.g. one you are logged into) instead of
-  nitrolane's own profile. Opt-in only — the subtask then acts as that session.
+  on this machine started with `--remote-debugging-port` (e.g. one you are logged into)
+  instead of nitrolane's own profile. Opt-in only, loopback only — the subtask then acts
+  as that session.
 - **A faster Windows backend** (`patches/`): UIA observation as a single CacheRequest
   subtree fetch (350 ms → 55 ms), exact layout-independent typing
   (ValuePattern first, Unicode `SendInput` fallback), native drop-down selection,
@@ -145,7 +151,7 @@ Details and per-change measurements: [`patches/README.md`](patches/README.md).
 Prerequisites: Python 3.12+, Chrome, git, and a decision provider —
 a [TypeSafe](https://typesafe.com) key (`TYPESAFE_API_KEY`, default), an OpenAI
 Decisions key, or any OpenAI-compatible chat endpoint (set
-`NITROLANE_PROVIDER=chat`, `NITROLANE_MODEL`, `NITROLANE_BASE_URL`). Optional:
+`NITROLANE_PROVIDER=chat`, `NITROLANE_MODEL`, `NITROLANE_BASE_URL`, `NITROLANE_API_KEY`). Optional:
 [cua-driver](https://github.com/trycua/cua) on `PATH` for background desktop control
 (`doctor` reports `cua_driver_background`).
 
@@ -169,8 +175,10 @@ vendor\arc-cua-windows\.venv\Scripts\python.exe nitrolane.py doctor
 - **Bounded subtasks.** You supply `goal`, literal `inputs`, `verification` criteria
   and `constraints`. The model only chooses among offered elements/operations; it can
   never invent text. Missing value → `NEEDS_INPUT` naming the field.
-- **Independent check.** `check` (JS expression in the browser, expected text on the
-  desktop) verifies the real UI state after the run — success is never taken on faith.
+- **Independent check.** `check` (JS expression in the browser; on the desktop, text that
+  must appear as whole words in an element's name or value) verifies the real UI state
+  after the run — success is never taken on faith. A desktop check that already held
+  before the run is reported as `check_before: true`, and such a run is never cached.
 - **Safety gates.** Delete/send/purchase/close controls are refused by name unless
   opted in via `allowed_risks`. Low-confidence decisions hand back (`NEEDS_AGENT`)
   instead of guessing. Secrets stay hidden from the model via `secret_inputs`.
@@ -207,7 +215,23 @@ vendor\arc-cua-windows\.venv\Scripts\python.exe tests\bench.py     # public micr
 `nitrolane_mcp.py` exposes `nitrolane_run` and `nitrolane_doctor` over stdio MCP —
 point Claude Code, Cursor, Codex or omp at
 `vendor\arc-cua-windows\.venv\Scripts\python.exe nitrolane_mcp.py` and the agent
-gets the whole lane as one tool call.
+gets the whole lane as one tool call. Subtasks run inside the server process, so warm
+calls skip interpreter start and imports: the same cached calculator task took **1.66 s
+per MCP call vs 2.9 s** as a fresh `nitrolane.py` process (end to end, 3 runs each).
+
+## Security model
+
+Requests come from agents, and agents read untrusted pages. So a request alone can
+never: run a program (`app.launch` takes only notepad/calc/mspaint or exact command
+lines you list in `NITROLANE_LAUNCH_ALLOW`, and never through a shell); choose where
+your API key goes (provider endpoint and key come only from `NITROLANE_BASE_URL` /
+`NITROLANE_API_KEY` / `TYPESAFE_API_KEY`); or attach to a remote browser (`cdp` must be
+loopback). nitrolane's own Chrome gets a random DevTools port per start and is only
+attached to when its profile's `DevToolsActivePort` matches the listener, so a foreign
+process on a port is never driven. OCR screenshots are deleted right after use;
+`setup.ps1` verifies the pinned backend archive's SHA256 before patching it.
+Any local process running as you can still reach the DevTools port (Chrome has no
+auth for it) — same trust boundary as your user account.
 
 ## Roadmap
 

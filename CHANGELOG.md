@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.5.0 — 2026-10-15
+
+Security (all found by an internal review; none reachable before only because nobody used it):
+- `app.launch` no longer runs through a shell and only starts notepad/calc/mspaint or exact
+  command lines listed in `NITROLANE_LAUNCH_ALLOW`; the request is validated before launching.
+- A request can no longer pick the provider endpoint or key (`base_url`, `api_key`,
+  `api_key_env` are rejected): via MCP, any caller could send a stored key to any host.
+  Use `NITROLANE_BASE_URL` / `NITROLANE_API_KEY`.
+- Own Chrome: random DevTools port per start; attached only when the profile's
+  `DevToolsActivePort` matches the listener (a foreign process on 9333 used to be driven).
+  Explicit `cdp` endpoints must be loopback.
+- `setup.ps1` checks the pinned backend archive's SHA256 and patches in a staging dir, so a
+  failed patch can no longer leave an unpatched backend that later runs skip; `install.ps1`
+  runs `doctor --deep` and fails when it fails.
+- Recorder no longer writes demonstrated values to disk (`--keep-values` to opt in); drop-down
+  picks are inputs too. OCR screenshots are unique per call and deleted right after.
+
+Correctness:
+- Desktop `check` matches whole words: "Anzeige lautet 15" no longer passes on 156. A check
+  that already held before the run is reported (`check_before`) and never cached.
+- Fleet: a task over `task_timeout_s` is reported as `TIMEOUT`; the batch keeps all other
+  results (it used to print nothing).
+- A cua-driver call that hangs ends the run instead of falling back (a late click plus the
+  fallback would act twice).
+- MCP server reports the real version and negotiates the protocol revision.
+
+Speed (measured on the same machine as before):
+- Background clicks: one persistent cua-driver session per process with its animated agent
+  cursor off — 0.06 s per click (was 0.3 s CLI per action; 0.6 s with the cursor animation).
+- UIA settle polls the revision instead of a fixed 0.15 s pause: 7-click cached calculator
+  replay 0.74 s in the foreground, 1.51 s fully in the background (was 2.6 s).
+- MCP server and fleet run subtasks in-process: same cached task 1.66 s per warm MCP call vs
+  2.9 s as a fresh process; fleet 4 browser tasks 8.6 s wall vs 15.1 s serial.
+
 ## v0.4.0 — 2026-10-15
 
 - **True background desktop** via cua-driver (when on PATH; `"background": false`

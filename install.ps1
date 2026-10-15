@@ -10,5 +10,10 @@ if (Test-Path $Dir) {
     if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
 }
 & (Join-Path $Dir "setup.ps1")
-& (Join-Path $Dir "vendor\arc-cua-windows\.venv\Scripts\python.exe") (Join-Path $Dir "nitrolane.py") doctor
-Write-Host "Installed to $Dir. Quickstart: see $Dir\README.md (a TYPESAFE_API_KEY is required for the default provider)."
+# --deep sends one real decision, so a wrong key or endpoint fails here, not on the first task.
+& (Join-Path $Dir "vendor\arc-cua-windows\.venv\Scripts\python.exe") (Join-Path $Dir "nitrolane.py") doctor --deep
+if ($LASTEXITCODE -ne 0) { throw "nitrolane doctor --deep failed (see the JSON above); fix it and re-run install.ps1" }
+if (-not (Get-Command cua-driver -ErrorAction SilentlyContinue)) {
+    Write-Host "Optional: install cua-driver (https://github.com/trycua/cua) for background desktop control without focus changes."
+}
+Write-Host "Installed to $Dir. Quickstart: see $Dir\README.md."

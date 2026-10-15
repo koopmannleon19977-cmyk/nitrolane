@@ -11,6 +11,8 @@ Exit code 0 whenever a result line was printed (whatever its status); 2 invalid 
 """
 from __future__ import annotations
 
+__version__ = "0.5.0"
+
 import hashlib
 import json
 import os
@@ -26,8 +28,8 @@ from arc_cua.policies import TypeSafeJevPolicy
 from arc_cua.runtime import RuntimeConfig
 from arc_cua.models import ActionKind, DesktopElement, DesktopSnapshot, ExecutableAction
 
-CDP_PORT = int(os.environ.get("NITROLANE_CDP_PORT") or os.environ.get("ARC_LANE_CDP_PORT", "9333"))
-CDP = f"http://127.0.0.1:{CDP_PORT}"
+# Port 0 = Chrome picks a free port per start; set NITROLANE_CDP_PORT only if you need a fixed one.
+CDP_PORT = int(os.environ.get("NITROLANE_CDP_PORT") or os.environ.get("ARC_LANE_CDP_PORT") or 0)
 PROFILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "nitrolane" / "chrome-profile"
 CACHE_DIR = Path(os.environ.get("NITROLANE_CACHE") or os.environ.get("ARC_LANE_CACHE", Path(os.environ.get("LOCALAPPDATA", Path.home())) / "nitrolane" / "cache"))
 # Observation is viewport-only; a tall viewport saves SCROLL decisions (inventory row 57: 3/3 right vs. 0/3).
@@ -46,22 +48,32 @@ if sys.platform == "win32" and not os.environ.get("TYPESAFE_API_KEY"):
         pass
 
 
-def _cdp_alive() -> bool:
+def _own_cdp() -> str | None:
+    """CDP URL of nitrolane's own Chrome, or None when it is not running.
+
+    Chrome writes its port and browser-target path to <profile>/DevToolsActivePort. A listener is
+    only trusted when /json/version reports that exact target: a stale or foreign process on the
+    port (which would then drive every run) is never attached to.
+    """
     import httpx
 
     try:
-        return httpx.get(CDP + "/json/version", timeout=0.5).status_code == 200
-    except httpx.HTTPError:
-        return False
+        port, path = (PROFILE / "DevToolsActivePort").read_text(encoding="utf-8").split()[:2]
+        url = f"http://127.0.0.1:{int(port)}"
+        ws = httpx.get(url + "/json/version", timeout=0.5).json().get("webSocketDebuggerUrl", "")
+    except (OSError, ValueError, httpx.HTTPError):
+        return None
+    return url if ws.endswith(path) else None
 
 
-def _ensure_chrome(headed: bool) -> None:
+def _ensure_chrome(headed: bool) -> str:
     """Keep one warm Chrome (own profile, never the user's) alive between runs; cold start costs ~7 s."""
-    if _cdp_alive():
-        return
+    if url := _own_cdp():
+        return url
     from arc_cua.backends.cdp import find_chrome
 
     PROFILE.mkdir(parents=True, exist_ok=True)
+    (PROFILE / "DevToolsActivePort").unlink(missing_ok=True)
     args = [find_chrome(), f"--remote-debugging-port={CDP_PORT}", f"--user-data-dir={PROFILE}",
             "--no-first-run", "--no-default-browser-check", f"--window-size={WINDOW}",
             "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
@@ -69,10 +81,11 @@ def _ensure_chrome(headed: bool) -> None:
     subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      creationflags=DETACH)
     deadline = time.monotonic() + 20
-    while not _cdp_alive():
+    while not (url := _own_cdp()):
         if time.monotonic() > deadline:
-            raise RuntimeError(f"Chrome did not open DevTools on {CDP}")
+            raise RuntimeError("nitrolane's Chrome did not open DevTools (or its port is taken)")
         time.sleep(0.1)
+    return url
 
 
 def _find_window(title: str, timeout_s: float) -> tuple[int, int]:
@@ -89,17 +102,35 @@ def _find_window(title: str, timeout_s: float) -> tuple[int, int]:
         time.sleep(0.2)
 
 
+# Built-in apps launchable without configuration; anything else must be listed verbatim in the
+# user's NITROLANE_LAUNCH_ALLOW (";"-separated command lines). Requests come from agents/MCP
+# callers, so a request alone must never be able to run an arbitrary command.
+SAFE_LAUNCH = {"notepad.exe", "calc.exe", "mspaint.exe", "notepad", "calc", "mspaint"}
+
+
+def _launch_argv(cmd: str) -> list[str]:
+    import shlex
+
+    allowed = {c.strip() for c in (_user_env("NITROLANE_LAUNCH_ALLOW") or "").split(";") if c.strip()}
+    if cmd.strip().lower() not in SAFE_LAUNCH and cmd.strip() not in allowed:
+        raise ValueError(f"launch {cmd!r} not allowed; add the exact command line to NITROLANE_LAUNCH_ALLOW")
+    return [a.strip('"') for a in shlex.split(cmd, posix=False)]
+
+
 def _desktop_backend(app: dict):
     from arc_cua.backends import WindowsUIABackend
 
     if "pid" in app:
         return WindowsUIABackend(int(app["pid"]))
-    if "launch" in app:
-        # Detached, no inherited pipes: otherwise a caller reading our stdout waits for the app to exit.
-        subprocess.Popen(app["launch"], shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, creationflags=DETACH)
-    if "title" not in app:
+    if "title" not in app:  # validate before any side effect
         raise ValueError('desktop app needs "pid" or "title" (with optional "launch")')
+    if "launch" in app:
+        # No shell, no inherited pipes (a caller reading our stdout would wait for the app to exit).
+        # Not DETACHED: console hosts (powershell fixtures) exit at once without a console; a hidden
+        # one keeps them alive and leaves GUI apps unaffected.
+        subprocess.Popen(_launch_argv(app["launch"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL,
+                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP)
     pid, hwnd = _find_window(app["title"], 15 if "launch" in app else 2)
     import ctypes
 
@@ -111,8 +142,16 @@ def _desktop_backend(app: dict):
 
 
 def _text_seen(backend, needle: str) -> bool:
+    """Desktop check: `needle` appears in an element name/value as whole words.
+
+    Plain substring matching passed "Anzeige lautet 15" on "Anzeige lautet 156" (and "Done" on
+    "Undone"), so a wrong run could be verified and cached as a template.
+    """
+    import re
+
+    pattern = re.compile(r"(?<!\w)" + re.escape(" ".join(needle.split())) + r"(?!\w)")
     snap = backend.observe()
-    return any(needle in (e.name or "") or needle in str(e.value or "") for e in snap.elements)
+    return any(pattern.search(" ".join(str(t).split())) for e in snap.elements for t in (e.name, e.value) if t)
 
 
 def _step(h: dict, rec) -> str:
@@ -187,13 +226,26 @@ def _recorded_steps(history_dicts: list[dict], inputs: dict) -> list[dict]:
 def _settle(backend, before_revision: str, timeout_s: float = 1.2):
     """Wait for the UI to go quiet, mirroring the executor: cheap probe if the backend has one.
 
-    Full-revision polling was slower than blind sleeps (browser revisions keep changing),
-    so probe-less backends (Windows UIA, synchronous input) just take a short fixed pause.
+    Probe-less backends (Windows UIA, ~55 ms per observe): return once the revision changed and
+    one more observe agrees, or after 0.15 s without change (the old fixed pause, now the cap).
     """
     probe = getattr(backend, "settle_probe", None)
     if probe is None:
-        time.sleep(0.15)
-        return backend.observe()
+        quiet_until = time.perf_counter() + 0.15
+        hard_stop = time.perf_counter() + timeout_s  # a ticking clock/animation never settles
+        snap = backend.observe()
+        while time.perf_counter() < hard_stop:
+            if snap.revision != before_revision:
+                again = backend.observe()
+                if again.revision == snap.revision:
+                    return again
+                snap = again
+            elif time.perf_counter() >= quiet_until:
+                return snap
+            else:
+                time.sleep(0.02)
+                snap = backend.observe()
+        return snap
     deadline = time.perf_counter() + timeout_s
     started = time.perf_counter()
     last = object()
@@ -315,12 +367,18 @@ def _user_env(name: str) -> str | None:
 
 
 def _policy(req: dict):
-    """Decision provider: jev (default) | openai (Decisions API) | chat (any OpenAI-compatible endpoint)."""
+    """Decision provider: jev (default) | openai (Decisions API) | chat (any OpenAI-compatible endpoint).
+
+    A request may pick the provider name and model only. Endpoint and key come from the user's
+    environment: otherwise any MCP caller could send a stored key to a host of its choosing.
+    """
     p = req.get("provider") or {}
+    if {"base_url", "api_key", "api_key_env"} & set(p):
+        raise ValueError("provider base_url/api_key come from NITROLANE_BASE_URL/NITROLANE_API_KEY only")
     name = (p.get("name") or os.environ.get("NITROLANE_PROVIDER") or "jev").lower()
-    key = p.get("api_key") or _user_env(p.get("api_key_env") or "")
+    key = _user_env("NITROLANE_API_KEY") if name != "jev" else None
     model = p.get("model") or os.environ.get("NITROLANE_MODEL") or None
-    base = p.get("base_url") or os.environ.get("NITROLANE_BASE_URL") or None
+    base = _user_env("NITROLANE_BASE_URL")
     if name == "jev":
         return TypeSafeJevPolicy(api_key=key, model=model)
     from arc_cua.policies import ChoicePolicy
@@ -335,8 +393,6 @@ def _policy(req: dict):
         return ChoicePolicy(ChatChoiceTransport(model, base_url=base or "https://api.openai.com/v1",
                                                  api_key=key or _user_env("OPENAI_API_KEY")))
     raise ValueError(f'unknown provider {name!r}; use "jev", "openai" or "chat"')
-
-
 
 
 def _foreground_hwnd() -> int:
@@ -361,6 +417,79 @@ def _restore_foreground(hwnd: int) -> None:
     user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
 
 
+class _CuaSession:
+    """One long-lived `cua-driver mcp` child per nitrolane process, in its own session.
+
+    Measured per background click on Calculator: fresh `cua-driver` CLI process 0.28-0.30 s;
+    this channel 0.58-0.70 s with the session's animated agent cursor, 0.13-0.16 s with it off.
+    """
+
+    SESSION = "nitrolane"
+
+    _lock = __import__("threading").Lock()
+    _proc = None
+    _next_id = 0
+
+    @classmethod
+    def _start(cls, exe: str):
+        import queue
+        import threading
+
+        proc = subprocess.Popen([exe, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1)
+        lines: queue.Queue = queue.Queue()
+        threading.Thread(target=lambda: [lines.put(line) for line in proc.stdout], daemon=True).start()
+        proc.lines = lines
+        cls._proc = proc
+        cls._send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                 "clientInfo": {"name": "nitrolane", "version": __version__}}, timeout_s=10)
+        proc.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+        proc.stdin.flush()
+        # Session-scoped: the user's own cua-driver config and other sessions keep their cursor.
+        cls._send("tools/call", {"name": "set_agent_cursor_enabled",
+                                 "arguments": {"enabled": False, "session": cls.SESSION}}, timeout_s=10)
+
+    @classmethod
+    def _send(cls, method: str, params: dict, timeout_s: float) -> dict:
+        import queue
+
+        cls._next_id += 1
+        mid = cls._next_id
+        cls._proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": mid, "method": method, "params": params}) + "\n")
+        cls._proc.stdin.flush()
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                msg = json.loads(cls._proc.lines.get(timeout=max(0.01, deadline - time.monotonic())))
+            except queue.Empty:
+                raise TimeoutError(f"cua-driver {method} took over {timeout_s} s") from None
+            if msg.get("id") == mid:
+                return msg
+
+    @classmethod
+    def run_steps(cls, exe: str, args: dict) -> dict | None:
+        """structuredContent of run_steps; None if the channel could not be used (nothing was sent)."""
+        with cls._lock:
+            try:
+                if cls._proc is None or cls._proc.poll() is not None:
+                    cls._start(exe)
+            except (OSError, ValueError, TimeoutError):
+                cls._proc = None
+                return None
+            try:
+                msg = cls._send("tools/call", {"name": "run_steps", "arguments": {**args, "session": cls.SESSION}},
+                                timeout_s=20)
+            except TimeoutError:
+                # The action may still land: retrying via the pattern path could act twice, so stop the run.
+                cls._proc.kill()
+                cls._proc = None
+                raise RuntimeError("cua-driver did not answer within 20 s; action state unknown") from None
+            except (OSError, ValueError):
+                cls._proc = None
+                return None
+            return (msg.get("result") or {}).get("structuredContent") or {}
+
+
 def _cua_background(backend, snapshot, action) -> bool:
     """Background tier: UIA Invoke/Toggle/ValuePattern performed by the cua-driver daemon.
 
@@ -383,15 +512,9 @@ def _cua_background(backend, snapshot, action) -> bool:
         return False
     target = {"role": el.role.lower(), "name": el.name}
     step = {"click": target} if action.kind == ActionKind.CLICK else {"set_value": {**target, "value": str(action.value)}}
-    args = {"pid": backend.pid, "window_id": backend.window_id, "steps": [step]}
-    proc = subprocess.run([exe, "run_steps", json.dumps(args)], capture_output=True, text=True,
-                          encoding="utf-8", timeout=20)
-    try:
-        res = json.loads(proc.stdout)
-    except ValueError:
-        return False
+    res = _CuaSession.run_steps(exe, {"pid": backend.pid, "window_id": backend.window_id, "steps": [step]})
     # Only semantic UIA routes count; a pixel/PostMessage fallback is unverifiable here.
-    if not res.get("ok") or "UIA" not in (res.get("steps") or [{}])[0].get("message", ""):
+    if not res or not res.get("ok") or "UIA" not in (res.get("steps") or [{}])[0].get("message", ""):
         return False
     if action.kind == ActionKind.CLICK:
         return True
@@ -417,7 +540,7 @@ def _doctor(argv: list[str]) -> int:
         checks["chrome"] = find_chrome()
     except Exception as exc:
         checks["chrome"] = f"missing ({exc})"
-    checks["chrome_cdp_alive"] = _cdp_alive()
+    checks["chrome_cdp_alive"] = _own_cdp() is not None
     checks["typesafe_key"] = bool(_user_env("TYPESAFE_API_KEY"))
     checks["provider"] = os.environ.get("NITROLANE_PROVIDER", "jev (default)")
     checks["cache_dir"] = str(CACHE_DIR)
@@ -457,12 +580,18 @@ def _ocr_lines(backend) -> tuple[dict, object]:
 
     backend.observe()  # resolves window_id
     rect = Desktop(backend="uia").window(handle=backend.window_id).rectangle()
-    png = Path(tempfile.gettempdir()) / "nitrolane_ocr.png"
-    proc = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                           str(Path(__file__).parent / "ocr_capture.ps1"),
-                           "-X", str(rect.left), "-Y", str(rect.top), "-W", str(rect.width()),
-                           "-H", str(rect.height()), "-Png", str(png)],
-                          capture_output=True, text=True, encoding="utf-8", timeout=120)
+    # Unique per call (concurrent MCP runs) and deleted afterwards: it shows private window content.
+    fd, name = tempfile.mkstemp(prefix="nitrolane_ocr_", suffix=".png")
+    os.close(fd)
+    png = Path(name)
+    try:
+        proc = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                               str(Path(__file__).parent / "ocr_capture.ps1"),
+                               "-X", str(rect.left), "-Y", str(rect.top), "-W", str(rect.width()),
+                               "-H", str(rect.height()), "-Png", str(png)],
+                              capture_output=True, text=True, encoding="utf-8", timeout=120)
+    finally:
+        png.unlink(missing_ok=True)
     if proc.returncode:
         raise RuntimeError(f"OCR failed: {proc.stderr[-300:]}")
     return json.loads(proc.stdout), rect
@@ -521,6 +650,20 @@ def main() -> int:
     raw = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else sys.stdin.read()
     try:
         req = json.loads(raw)
+    except ValueError as exc:
+        out, code = {"type": "error", "error": f"invalid input: {exc}"}, 2
+    else:
+        out, code = run(req)
+    # Indented: short lines, so tool output is never cut mid-line.
+    print(json.dumps(out, ensure_ascii=False, indent=1 if out.get("type") == "result" else None))
+    return code
+
+
+def run(req: dict) -> tuple[dict, int]:
+    """One subtask in this process: (result object, exit code). Used by main, the MCP server and the fleet."""
+    try:
+        if not isinstance(req, dict):
+            raise TypeError("request must be a JSON object")
         spec = req.get("subtask") or {"goal": f"OCR action on {req['ocr']['text']!r}",
                                       "verification": ["The OCR action completed"]}
         subtask = subtask_from_dict(spec)
@@ -538,8 +681,7 @@ def main() -> int:
         if target not in ("browser", "desktop"):
             raise ValueError('target must be "browser" or "desktop"')
     except (ValueError, KeyError, TypeError) as exc:
-        print(json.dumps({"type": "error", "error": f"invalid input: {exc}"}))
-        return 2
+        return {"type": "error", "error": f"invalid input: {exc}"}, 2
 
     # 0.35: multi-field tasks split confidence across equally valid first steps (correct form
     # SET_VALUE scored 0.33-0.43); the 0.43 wrong-target evidence came from the old 900px viewport.
@@ -558,17 +700,20 @@ def main() -> int:
             # that browser's tabs and session are the user's, so the subtask acts as them.
             endpoint = req.get("cdp")
             if endpoint:
+                from urllib.parse import urlparse
+
+                if urlparse(endpoint).hostname not in ("127.0.0.1", "localhost", "::1"):
+                    raise ValueError("cdp endpoint must be on this machine (127.0.0.1/localhost)")
                 backend = ChromeBackend.connect(endpoint, url=req.get("url", "about:blank"))
             else:
-                _ensure_chrome(bool(req.get("headed")))
-                backend = ChromeBackend.connect(CDP, url=req.get("url", "about:blank"))
+                cdp = _ensure_chrome(bool(req.get("headed")))
+                backend = ChromeBackend.connect(cdp, url=req.get("url", "about:blank"))
         else:
             backend = _desktop_backend(req.get("app") or {})
             if req.get("background", True):
                 backend.adapter.background = _cua_background
     except Exception as exc:  # setup failures are reported, never raised into the caller's shell
-        print(json.dumps({"type": "error", "error": f"{type(exc).__name__}: {exc}"}))
-        return 1
+        return {"type": "error", "error": f"{type(exc).__name__}: {exc}"}, 1
 
     t1 = time.perf_counter()
     out: dict = {"type": "result", "target": target}
@@ -579,8 +724,12 @@ def main() -> int:
         if target == "desktop" and req.get("ocr"):
             out.update(_ocr_action(backend, req))
             handled = True
+        # A desktop check that already holds before the run proves nothing about the run.
+        if target == "desktop" and check and not handled and _text_seen(backend, check):
+            out["check_before"] = True
         # Cache only verified work: no independent check, no recording and no replay.
-        cache_path = _cache_path(req) if req.get("cache") and check and not handled else None
+        cache_path = (_cache_path(req) if req.get("cache") and check and not handled
+                      and not out.get("check_before") else None)
         replayed, history_dicts, prefix, healed = False, [], [], 0
         if cache_path and cache_path.exists():
             steps = json.loads(cache_path.read_text(encoding="utf-8"))["steps"]
@@ -673,9 +822,7 @@ def main() -> int:
             backend.close()
         if user_hwnd:
             _restore_foreground(user_hwnd)
-    # Indented: short lines, so tool output is never cut mid-line.
-    print(json.dumps(out, ensure_ascii=False, indent=1))
-    return 0
+    return out, 0
 
 
 if __name__ == "__main__":

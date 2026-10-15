@@ -1,2 +1,2 @@
-{"target":"desktop","app":{"launch":"pythonw C:\\Users\\koopm\\.omp\\agent\\tools\\nitrolane\\tests\\canvas_app.py","title":"nitrolane canvas"},
+{"target":"desktop","app":{"title":"nitrolane canvas"},
  "ocr":{"text":"Start Mission","action":"click","check_text":"Mission Done"}}
