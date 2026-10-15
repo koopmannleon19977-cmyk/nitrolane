@@ -1,0 +1,5 @@
+{"target":"desktop","app":{"title":"– Notepad"},
+ "subtask":{"goal":"Replace the document text with the supplied text",
+  "inputs":{"text":"Cache-Test arc-lane 7"},
+  "verification":["The document text is exactly the supplied text"],"max_actions":4},
+ "check":"Cache-Test arc-lane 7", "cache":true}

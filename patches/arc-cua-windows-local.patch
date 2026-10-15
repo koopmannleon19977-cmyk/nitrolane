@@ -1,0 +1,541 @@
+diff --git a/src/arc_cua/backends/windows_uia.py b/src/arc_cua/backends/windows_uia.py
+index 400dcc9..1ed862a 100644
+--- a/src/arc_cua/backends/windows_uia.py
++++ b/src/arc_cua/backends/windows_uia.py
+@@ -48,9 +48,124 @@ def hotkey_sequence(chord: str) -> str:
+             + "".join("{" + c + " up}" for c in reversed(codes)))
+ 
+ 
+-def literal_sequence(text: str) -> str:
+-    """User text never becomes pywinauto's keyboard macro language."""
+-    return "".join("{" + c + "}" if c in "+^%~(){}" else c for c in text)
++def send_unicode_text(text: str) -> None:
++    """Type `text` as one SendInput batch of KEYEVENTF_UNICODE events.
++
++    pywinauto maps characters through the active keyboard layout (AltGr chords on
++    German layouts), which dropped or repeated characters in Windows 11 Notepad.
++    Unicode events carry no modifiers, so the layout cannot corrupt them.
++    """
++    import ctypes
++    from ctypes import wintypes
++
++    class KEYBDINPUT(ctypes.Structure):
++        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
++                    ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
++
++    class _U(ctypes.Union):  # sized for MOUSEINPUT, the largest member
++        _fields_ = [("ki", KEYBDINPUT), ("_pad", ctypes.c_byte * 32)]
++
++    class INPUT(ctypes.Structure):
++        _fields_ = [("type", wintypes.DWORD), ("u", _U)]
++
++    keyup, unicode = 0x0002, 0x0004
++    events: list[INPUT] = []
++
++    def add(vk: int, scan: int, flags: int) -> None:
++        for extra in (0, keyup):
++            item = INPUT(type=1)
++            item.u.ki = KEYBDINPUT(vk, scan, flags | extra, 0, 0)
++            events.append(item)
++
++    for char in text.replace("\r\n", "\n"):
++        if char == "\n":
++            add(0x0D, 0, 0)
++        elif char == "\t":
++            add(0x09, 0, 0)
++        else:
++            data = char.encode("utf-16-le")
++            for i in range(0, len(data), 2):  # surrogate pairs become two events
++                add(0, int.from_bytes(data[i:i + 2], "little"), unicode)
++    if not events:
++        return
++    array = (INPUT * len(events))(*events)
++    sent = ctypes.windll.user32.SendInput(len(events), array, ctypes.sizeof(INPUT))
++    if sent != len(events):
++        raise TargetUnavailable(f"SendInput delivered {sent} of {len(events)} key events")
++
++
++_CACHED_PROPERTIES = (
++    "RuntimeId", "Name", "ControlType", "BoundingRectangle", "IsEnabled", "IsOffscreen", "HasKeyboardFocus",
++    "IsKeyboardFocusable", "IsPassword", "AutomationId", "IsValuePatternAvailable", "ValueValue",
++    "ValueIsReadOnly", "IsScrollPatternAvailable", "ScrollVerticallyScrollable", "ScrollHorizontallyScrollable",
++)
++
++
++class _CachedNode:
++    """Wrapper-shaped view of one element from a single UIA CacheRequest subtree fetch.
++
++    One cross-process call per observation instead of about ten per control: an
++    observation of Calculator drops from ~350 ms to ~55 ms. `live()` returns a real
++    pywinauto wrapper for input.
++    """
++
++    def __init__(self, element: Any, uia: Any) -> None:
++        from types import SimpleNamespace
++
++        self._e, self._uia = element, uia
++        d, get = uia.UIA_dll, element.GetCachedPropertyValue
++        self._get, self._d = get, d
++        self.element_info = SimpleNamespace(
++            runtime_id=tuple(get(d.UIA_RuntimeIdPropertyId) or ()),
++            control_type=uia.known_control_type_ids.get(element.CachedControlType, str(element.CachedControlType)),
++            name=element.CachedName or "", automation_id=element.CachedAutomationId or "",
++            element=SimpleNamespace(CurrentIsPassword=bool(element.CachedIsPassword),
++                                    CurrentHasKeyboardFocus=bool(element.CachedHasKeyboardFocus),
++                                    CurrentIsKeyboardFocusable=bool(element.CachedIsKeyboardFocusable)))
++
++    def rectangle(self) -> Any:
++        from types import SimpleNamespace
++
++        r = self._e.CachedBoundingRectangle
++        return SimpleNamespace(left=r.left, top=r.top, width=lambda: r.right - r.left, height=lambda: r.bottom - r.top)
++
++    def is_visible(self) -> bool:
++        return not self._e.CachedIsOffscreen
++
++    def is_enabled(self) -> bool:
++        return bool(self._e.CachedIsEnabled)
++
++    @property
++    def iface_value(self) -> Any:
++        from types import SimpleNamespace
++
++        if not self._get(self._d.UIA_IsValuePatternAvailablePropertyId):
++            raise AttributeError("no ValuePattern")
++        return SimpleNamespace(CurrentIsReadOnly=bool(self._get(self._d.UIA_ValueIsReadOnlyPropertyId)),
++                               CurrentValue=self._get(self._d.UIA_ValueValuePropertyId))
++
++    @property
++    def iface_scroll(self) -> Any:
++        from types import SimpleNamespace
++
++        if not self._get(self._d.UIA_IsScrollPatternAvailablePropertyId):
++            raise AttributeError("no ScrollPattern")
++        return SimpleNamespace(
++            CurrentVerticallyScrollable=bool(self._get(self._d.UIA_ScrollVerticallyScrollablePropertyId)),
++            CurrentHorizontallyScrollable=bool(self._get(self._d.UIA_ScrollHorizontallyScrollablePropertyId)))
++
++    def children(self) -> list[_CachedNode]:
++        kids = self._e.GetCachedChildren()
++        return [_CachedNode(kids.GetElement(i), self._uia) for i in range(kids.Length)] if kids else []
++
++    def window_text(self) -> str:
++        return self.element_info.name
++
++    def live(self) -> Any:
++        from pywinauto.controls.uiawrapper import UIAWrapper
++        from pywinauto.uia_element_info import UIAElementInfo
++
++        return UIAWrapper(UIAElementInfo(self._e))
+ 
+ 
+ class WindowsUIAAdapter:
+@@ -73,6 +188,7 @@ class WindowsUIAAdapter:
+         self.user32.IsWindow.argtypes = [ctypes.c_void_p]
+         self.user32.IsIconic.argtypes = [ctypes.c_void_p]
+         self.user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
++        self.user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+ 
+     def windows(self, pid: int | None = None) -> list[dict[str, Any]]:
+         result = []
+@@ -107,9 +223,23 @@ class WindowsUIAAdapter:
+         if self.user32.IsIconic(hwnd):
+             raise TargetUnavailable("Restore the target window before using the Windows MVP")
+ 
++    def _root(self, hwnd: int) -> _CachedNode:
++        if getattr(self, "_cache", None) is None:
++            from pywinauto.uia_defines import IUIA
++
++            uia = IUIA()
++            request = uia.iuia.CreateCacheRequest()
++            for name in _CACHED_PROPERTIES:
++                request.AddProperty(getattr(uia.UIA_dll, f"UIA_{name}PropertyId"))
++            request.TreeScope = uia.UIA_dll.TreeScope_Subtree
++            request.TreeFilter = uia.iuia.ControlViewCondition
++            self._cache = (uia, request)
++        uia, request = self._cache
++        return _CachedNode(uia.iuia.ElementFromHandleBuildCache(hwnd, request), uia)
++
+     def read(self, pid: int, hwnd: int, limit: int) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+         self.check_window(pid, hwnd)
+-        root = self.desktop.window(handle=hwnd).wrapper_object()
++        root = self._root(hwnd)
+         if not root.is_visible():
+             raise TargetUnavailable("Target window is hidden")
+         rows: list[dict[str, Any]] = []
+@@ -137,6 +267,8 @@ class WindowsUIAAdapter:
+                     writable = not bool(pattern.CurrentIsReadOnly)
+                     if not password:
+                         value = pattern.CurrentValue
++                        if isinstance(value, str):  # Edit controls report line breaks as \r or \r\n.
++                            value = value.replace("\r\n", "\n").replace("\r", "\n")
+                 except Exception:
+                     pass  # ValuePattern is optional.
+                 actions = []
+@@ -144,7 +276,7 @@ class WindowsUIAAdapter:
+                     actions = [ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK]
+                     if writable or (info.control_type == "Edit" and info.element.CurrentIsKeyboardFocusable):
+                         actions.append(ActionKind.TYPE_TEXT)
+-                    if writable:
++                    if writable or info.control_type == "ComboBox":
+                         actions.append(ActionKind.SET_VALUE)
+                     try:
+                         scroll = wrapper.iface_scroll
+@@ -167,19 +299,61 @@ class WindowsUIAAdapter:
+                 errors += 1  # Inaccessible/disappearing controls are not actionable.
+         return root.window_text(), rows, {"truncated": bool(pending) or depth_limited, "read_errors": errors}
+ 
+-    def foreground(self, pid: int, hwnd: int) -> None:
++    def foreground(self, pid: int, hwnd: int) -> bool:
++        """Bring the window to the front; True when it had to be activated."""
+         self.check_window(pid, hwnd)
++        if int(self.user32.GetForegroundWindow() or 0) == hwnd:
++            return False
++        self.desktop.window(handle=hwnd).wrapper_object().set_focus()
+         if int(self.user32.GetForegroundWindow() or 0) != hwnd:
+-            self.desktop.window(handle=hwnd).wrapper_object().set_focus()
++            # The foreground lock refuses processes without recent input; a synthetic Alt tap counts as input.
++            self.user32.keybd_event(0x12, 0, 0, 0)
++            self.user32.keybd_event(0x12, 0, 0x0002, 0)
++            self.user32.SetForegroundWindow(hwnd)
++            time.sleep(0.05)
+         self.assert_foreground(hwnd)
++        return True
+ 
+     def assert_foreground(self, hwnd: int) -> None:
+         if int(self.user32.GetForegroundWindow() or 0) != hwnd:
+             raise TargetUnavailable("Windows did not grant foreground focus; activate the target and retry")
+ 
++    def select_option(self, ref: Any, value: str) -> None:
++        """Pick a drop-down item by exact name: UIA ExpandCollapse + SelectionItem, else the native combo.
++
++        WinForms/Win32 drop-down lists expose no ExpandCollapse and keep their items out of
++        the UIA tree until opened; CB_SETCURSEL via the HWND also fires SelectedIndexChanged.
++        """
++        try:
++            expander = ref.iface_expand_collapse
++        except Exception:
++            expander = None
++        if expander is not None:
++            expander.Expand()
++            try:
++                item = next((i for i in ref.descendants(control_type="ListItem") if i.window_text() == value), None)
++                if item is None:
++                    raise ValueError(f"No option matches {value!r}")
++                item.iface_selection_item.Select()
++            finally:
++                expander.Collapse()
++            return
++        if not ref.element_info.handle:
++            raise UnsupportedDesktopAction("Drop-down has neither ExpandCollapse nor a native window handle")
++        from pywinauto.controls.win32_controls import ComboBoxWrapper
++
++        combo = ComboBoxWrapper(ref.element_info.handle)
++        if value not in combo.item_texts():
++            raise ValueError(f"No option matches {value!r}")
++        combo.select(value)
++
+     def perform(self, hwnd: int, ref: Any, action: ExecutableAction) -> None:
+         self.assert_foreground(hwnd)
++        ref = ref.live() if hasattr(ref, "live") else ref
+         kind = action.kind
++        if kind in {ActionKind.SET_VALUE, ActionKind.TYPE_TEXT} and ref.element_info.control_type == "ComboBox":
++            self.select_option(ref, str(action.value))  # Drop-down lists take no typed text.
++            return
+         if kind in {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}:
+             modifier = {None: "", "MOD": "control", "SHIFT": "shift"}[action.click_modifier]
+             ref.click_input(button="right" if kind == ActionKind.RIGHT_CLICK else "left",
+@@ -192,9 +366,19 @@ class WindowsUIAAdapter:
+             if not ref.element_info.element.CurrentHasKeyboardFocus:
+                 raise TargetUnavailable("Editable control did not receive keyboard focus; no text sent")
+             # TYPE_TEXT replaces the field, matching upstream text entry semantics.
+-            self.keyboard.send_keys("^a", pause=0.01)
+-            self.keyboard.send_keys(literal_sequence(str(action.value)), pause=0.01,
+-                                    with_spaces=True, with_tabs=True, with_newlines=True)
++            text = str(action.value)
++            try:
++                pattern = ref.iface_value
++                writable = not pattern.CurrentIsReadOnly
++            except Exception:
++                pattern, writable = None, False
++            if writable:
++                # Exact and layout-independent; Windows 11 Notepad corrupts fast synthetic typing.
++                pattern.SetValue(text)
++                if str(pattern.CurrentValue).replace("\r\n", "\n").replace("\r", "\n") == text.replace("\r\n", "\n"):
++                    return
++            self.keyboard.send_keys("^a", pause=0.01, vk_packet=False)
++            send_unicode_text(text)
+         elif kind in {ActionKind.HOTKEY, ActionKind.PRESS_KEY}:
+             sequence = hotkey_sequence(action.hotkey) if kind == ActionKind.HOTKEY else key_sequence(action.key)
+             # Braced single-letter keys otherwise become Unicode packets, which
+@@ -302,10 +486,11 @@ class WindowsUIABackend:
+         if kind == ActionKind.WAIT:
+             time.sleep(0.05)
+             return
+-        self.adapter.foreground(self.pid, self.window_id)
++        activated = self.adapter.foreground(self.pid, self.window_id)
+         # Activation can change focus, values or layout. Refuse rather than acting
+-        # on the old tree; runtime/clients observe again and retry.
+-        if not self.is_fresh(snapshot, action):
++        # on the old tree; runtime/clients observe again and retry. An adapter that
++        # reports the window was already in front (False) changed nothing to recheck.
++        if activated is not False and not self.is_fresh(snapshot, action):
+             raise StaleDesktopState("Window changed during activation; observe again")
+         ref_id = action.target_id
+         if kind == ActionKind.SCROLL and ref_id is None:
+diff --git a/src/arc_cua/policies/choice.py b/src/arc_cua/policies/choice.py
+index 5cc2c44..063f6d2 100644
+--- a/src/arc_cua/policies/choice.py
++++ b/src/arc_cua/policies/choice.py
+@@ -27,7 +27,7 @@ from ..models import (
+     TerminalKind,
+     summarize_history,
+ )
+-from ..safety import RISKY_KINDS, SECRET_PLACEHOLDER, disallowed_risks, redact
++from ..safety import SECRET_PLACEHOLDER, redact
+ 
+ POLICY_RULES = """Execute the supplied desktop subtask using exactly one next operation.
+ 
+@@ -326,9 +326,6 @@ class ChoicePolicy:
+             for kind in element.actions:
+                 if kind == ActionKind.DRAG_BY:
+                     continue
+-                # Consequential controls are offered only when the subtask allows that risk.
+-                if kind in RISKY_KINDS and disallowed_risks(element.name, subtask.allowed_risks):
+-                    continue
+                 if kind == ActionKind.SET_VALUE and not any(
+                     _value_type_matches(element, value) for value in subtask.inputs.values()
+                 ):
+diff --git a/src/arc_cua/runtime.py b/src/arc_cua/runtime.py
+index b500099..ce672f4 100644
+--- a/src/arc_cua/runtime.py
++++ b/src/arc_cua/runtime.py
+@@ -54,11 +54,15 @@ class RuntimeConfig:
+     # Same, when the chosen option's probability leads the runner-up's by less
+     # than this (a near-tie). Decisions that report no margin are not gated.
+     min_margin: float | None = None
++    # Completions use this instead of min_confidence when set: JEV's completion confidence
++    # runs lower than its action confidence on correct runs (0.38-0.43 seen), so one
++    # threshold either lets wrong actions through or hands back finished work.
++    min_completion_confidence: float | None = None
+     # Decide and validate the next action, then stop with DRY_RUN instead of acting.
+     dry_run: bool = False
+ 
+     def __post_init__(self) -> None:
+-        for name in ("min_confidence", "min_margin"):
++        for name in ("min_confidence", "min_margin", "min_completion_confidence"):
+             value = getattr(self, name)
+             if value is not None and not 0 <= value <= 1:
+                 raise ValueError(f"RuntimeConfig.{name} must be between 0 and 1")
+@@ -142,10 +146,12 @@ class DesktopExecutor:
+             return self.backend.observe()
+         if before_probe is not None:
+             return self._settle_with_probe(before_probe)
++        # Only backends without settle_probe get here (today: Windows UIA, whose
++        # observation is a ~50 ms cached UIA fetch), so poll tightly.
+         if action.kind == ActionKind.TYPE_TEXT:
+             minimum_wait_s = 0.65
+             timeout_s = 2.5
+-            poll_s = 0.12
++            poll_s = 0.05
+         elif action.kind in {
+             ActionKind.CLICK,
+             ActionKind.DOUBLE_CLICK,
+@@ -158,7 +164,7 @@ class DesktopExecutor:
+         }:
+             minimum_wait_s = 0.18
+             timeout_s = 1.5
+-            poll_s = 0.10
++            poll_s = 0.05
+         else:
+             return self.backend.observe()
+ 
+@@ -202,8 +208,12 @@ class DesktopExecutor:
+         if decision.terminal not in (None, TerminalKind.SUBTASK_COMPLETE):
+             return None
+         what = decision.kind.value if decision.kind is not None else decision.terminal.value
++        completing = decision.terminal == TerminalKind.SUBTASK_COMPLETE
++        min_confidence = self.config.min_confidence
++        if completing and self.config.min_completion_confidence is not None:
++            min_confidence = self.config.min_completion_confidence
+         checks = (
+-            ("confidence", decision.confidence, self.config.min_confidence),
++            ("confidence", decision.confidence, min_confidence),
+             ("margin", decision.margin, self.config.min_margin),
+         )
+         for name, value, threshold in checks:
+diff --git a/src/arc_cua/safety.py b/src/arc_cua/safety.py
+index 1e1c306..17b3571 100644
+--- a/src/arc_cua/safety.py
++++ b/src/arc_cua/safety.py
+@@ -1,8 +1,9 @@
+ """Consequential-control detection and secret redaction.
+ 
+ Risky controls are recognized by whole words in their label. A subtask opts into a
+-category with `Subtask.allowed_risks`; otherwise such controls are not offered to
+-the decision model and the runtime refuses to activate them.
++category with `Subtask.allowed_risks`; otherwise the runtime refuses to activate them
++and hands back NEEDS_AGENT naming the risk. They stay visible to the decision model:
++hiding them made it click the next-best control instead (e.g. "Save" for "Delete").
+ """
+ 
+ from __future__ import annotations
+diff --git a/tests/golden/jev_request_field_without_inputs.json b/tests/golden/jev_request_field_without_inputs.json
+index 717e516..66b361a 100644
+--- a/tests/golden/jev_request_field_without_inputs.json
++++ b/tests/golden/jev_request_field_without_inputs.json
+@@ -83,7 +83,8 @@
+     "click_target": {
+       "type": "choice",
+       "criteria": {
+-        "to": "Element to in state.desktop.elements"
++        "to": "Element to in state.desktop.elements",
++        "send": "Element send in state.desktop.elements"
+       },
+       "instructions": {
+         "operation": "CLICK",
+diff --git a/tests/golden/jev_request_secrets_and_risks.json b/tests/golden/jev_request_secrets_and_risks.json
+index 6796ebb..8b27328 100644
+--- a/tests/golden/jev_request_secrets_and_risks.json
++++ b/tests/golden/jev_request_secrets_and_risks.json
+@@ -115,6 +115,7 @@
+       "type": "choice",
+       "criteria": {
+         "password": "Element password in state.desktop.elements",
++        "delete": "Element delete in state.desktop.elements",
+         "save": "Element save in state.desktop.elements"
+       },
+       "instructions": {
+diff --git a/tests/test_runtime.py b/tests/test_runtime.py
+index 452ad05..00495d5 100644
+--- a/tests/test_runtime.py
++++ b/tests/test_runtime.py
+@@ -417,10 +417,10 @@ def test_click_modifier_is_only_valid_on_click() -> None:
+ # --- min_confidence ---
+ 
+ 
+-def _run_with_threshold(decisions, threshold, *, margin=None):
++def _run_with_threshold(decisions, threshold, *, margin=None, completion=None):
+     backend = StateMachineBackend({"value": ""}, snapshot, transition)
+     task = Subtask(goal="Search", verification=("Search contains x",), inputs={"query": "x"})
+-    config = RuntimeConfig(min_confidence=threshold, min_margin=margin)
++    config = RuntimeConfig(min_confidence=threshold, min_margin=margin, min_completion_confidence=completion)
+     return backend, DesktopExecutor(backend, ScriptedPolicy(decisions), config=config).run(task)
+ 
+ 
+@@ -440,6 +440,19 @@ def test_low_confidence_completion_returns_needs_agent() -> None:
+     assert "SUBTASK_COMPLETE" in result.reason
+ 
+ 
++def test_completion_threshold_overrides_min_confidence_for_completions_only() -> None:
++    backend, result = _run_with_threshold([
++        Decision(kind=ActionKind.TYPE_TEXT, target_id="search", input_key="query", confidence=0.7),
++        Decision(terminal=TerminalKind.SUBTASK_COMPLETE, confidence=0.4),
++    ], 0.6, completion=0.3)
++    assert result.status == TerminalKind.SUBTASK_COMPLETE and backend.state["value"] == "x"
++    _, result = _run_with_threshold(
++        [Decision(kind=ActionKind.TYPE_TEXT, target_id="search", input_key="query", confidence=0.4)],
++        0.6, completion=0.3,
++    )
++    assert result.status == TerminalKind.NEEDS_AGENT and result.actions_taken == 0
++
++
+ def test_confident_or_unscored_decisions_and_handbacks_are_not_gated() -> None:
+     backend, result = _run_with_threshold([
+         Decision(kind=ActionKind.TYPE_TEXT, target_id="search", input_key="query", confidence=0.6),
+diff --git a/tests/test_safety.py b/tests/test_safety.py
+index 8aaee20..296ef61 100644
+--- a/tests/test_safety.py
++++ b/tests/test_safety.py
+@@ -58,17 +58,14 @@ def mail_snapshot(state=None) -> DesktopSnapshot:
+     ))
+ 
+ 
+-@pytest.mark.parametrize(("allowed", "offered"), [
+-    ((), {"password", "save"}),
+-    (("delete",), {"password", "save", "delete"}),
+-])
+-def test_risky_controls_are_offered_only_when_allowed(allowed, offered):
+-    transport = Recorder({"operation": "NEEDS_AGENT"})
+-    ChoicePolicy(transport).decide(
+-        subtask=Subtask(goal="Update the account", verification=("Saved",), allowed_risks=allowed),
+-        snapshot=mail_snapshot(), history=(),
+-    )
+-    assert set(transport.calls[0][1]["click_target"]["criteria"]) == offered
++def test_risky_controls_stay_offered_so_a_refusal_names_the_risk():
++    transport = Recorder({"operation": "CLICK", "click_target": "delete", "click_modifier": "NONE"})
++    backend = StateMachineBackend({"password": "", "sent": False}, mail_snapshot, transition)
++    result = DesktopExecutor(backend, ChoicePolicy(transport)).run(
++        Subtask(goal="Delete the account", verification=("Deleted",)))
++    assert "delete" in transport.calls[0][1]["click_target"]["criteria"]
++    assert result.status == TerminalKind.NEEDS_AGENT and "allowed_risks" in result.reason
++    assert backend.state["sent"] is False
+ 
+ 
+ def transition(state, action):
+diff --git a/tests/test_windows_uia.py b/tests/test_windows_uia.py
+index 1d32e06..d6c9f4b 100644
+--- a/tests/test_windows_uia.py
++++ b/tests/test_windows_uia.py
+@@ -7,7 +7,6 @@ from arc_cua.backends.windows_uia import (
+     WindowsUIABackend,
+     hotkey_sequence,
+     key_sequence,
+-    literal_sequence,
+ )
+ from arc_cua.errors import ActionNotOffered, InvalidArguments, StaleDesktopState, UnsupportedDesktopAction
+ from arc_cua.models import ActionKind as K
+@@ -120,7 +119,6 @@ def test_invalid_actions_never_activate(action, error):
+ def test_keyboard_macro_escaping_and_ctrl_mapping():
+     assert hotkey_sequence("MOD+A") == "{VK_CONTROL down}{A}{VK_CONTROL up}"
+     assert key_sequence("ARROW_DOWN") == "{DOWN}"
+-    assert literal_sequence("+{ENTER} café") == "{+}{{}ENTER{}} café"
+     with pytest.raises(ValueError):
+         hotkey_sequence("CTRL+A; DELETE")
+ 
+@@ -240,6 +238,7 @@ def native_fake():
+     adapter.check_window = lambda pid, hwnd: None
+     adapter.assert_foreground = lambda hwnd: None
+     adapter.desktop = NS(window=lambda **kwargs: NS(wrapper_object=lambda: root))
++    adapter._root = lambda hwnd: root
+     adapter.user32 = NS(GetForegroundWindow=lambda: 100)
+     sent = []
+     adapter.keyboard = NS(send_keys=lambda sequence, **kwargs: sent.append(sequence))
+@@ -258,17 +257,34 @@ def test_native_observation_hides_password_and_reports_truncation():
+     assert len(limited) == 1 and diagnostics["truncated"]
+ 
+ 
+-def test_native_modifier_and_literal_input_mapping():
++def test_native_modifier_and_literal_input_mapping(monkeypatch):
++    import arc_cua.backends.windows_uia as uia
++
++    typed = []
++    monkeypatch.setattr(uia, "send_unicode_text", typed.append)
+     adapter, root, _, sent = native_fake()
+     adapter.perform(100, root, ExecutableAction(K.CLICK, click_modifier="MOD"))
+     assert root.clicked["pressed"] == "control"
+     assert not root.clicked["use_log"]
++    # The fake's SetValue does not take, so text falls back to literal Unicode typing.
+     adapter.perform(100, root, ExecutableAction(K.TYPE_TEXT, value="+{ENTER} café"))
+-    assert sent == ["^a", "{+}{{}ENTER{}} café"]
++    assert sent == ["^a"] and typed == ["+{ENTER} café"]
+     root.element_info.element.CurrentHasKeyboardFocus = False
+     with pytest.raises(Exception, match="keyboard focus"):
+         adapter.perform(100, root, ExecutableAction(K.TYPE_TEXT, value="should not type"))
+-    assert len(sent) == 2
++    assert len(sent) == 1 and len(typed) == 1
++
++
++def test_native_text_prefers_value_pattern_when_it_takes(monkeypatch):
++    import arc_cua.backends.windows_uia as uia
++
++    typed = []
++    monkeypatch.setattr(uia, "send_unicode_text", typed.append)
++    adapter, root, _, sent = native_fake()
++    root.iface_value.SetValue = lambda value: setattr(root.iface_value, "CurrentValue", value.replace("\n", "\r"))
++    adapter.perform(100, root, ExecutableAction(K.TYPE_TEXT, value="Zeile 1\nZeile 2"))
++    assert root.iface_value.CurrentValue == "Zeile 1\rZeile 2"
++    assert sent == [] and typed == []
+ 
+ 
+ def test_native_foreground_does_not_reset_existing_focus():

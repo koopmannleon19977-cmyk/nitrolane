@@ -1,0 +1,7 @@
+{"target":"browser","url":"https://httpbin.org/forms/post",
+ "subtask":{"goal":"Fill the pizza order form and submit it",
+  "inputs":{"name":"Max Muster","phone":"0123456","email":"max@example.com"},
+  "verification":["The order was submitted and the response page is shown"],
+  "constraints":["Choose size Medium","Select topping Bacon only"],"max_actions":15},
+ "check":"document.body.innerText.includes('\"size\": \"medium\"') && document.body.innerText.includes('\"topping\": \"bacon\"')",
+ "cache":true}

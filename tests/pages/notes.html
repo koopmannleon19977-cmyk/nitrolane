@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Notes</title></head>
+<body>
+  <h1>Account notes</h1>
+  <label for="note">Note</label>
+  <textarea id="note" rows="3" cols="40"></textarea>
+  <button id="save" type="button">Save note</button>
+  <button id="delete" type="button">Delete account</button>
+  <p id="status" role="status"></p>
+  <script>
+    window.__saved = null; window.__deleted = false;
+    document.getElementById('save').onclick = () => {
+      window.__saved = document.getElementById('note').value;
+      document.getElementById('status').textContent = 'Note saved';
+    };
+    document.getElementById('delete').onclick = () => {
+      window.__deleted = true;
+      document.getElementById('status').textContent = 'Account deleted';
+    };
+  </script>
+</body>
+</html>
