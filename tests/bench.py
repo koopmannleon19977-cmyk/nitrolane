@@ -51,6 +51,11 @@ TASKS = {
 
 
 def run(req: dict) -> dict:
+    # Desktop apps keep state between runs: without a reset a run could start at the answer and
+    # "complete" with 0 actions (measured: calc 0.74 s, actions=0). Reset first, always.
+    if req["target"] == "desktop":
+        app = "calc" if "Rechner" in req["app"]["title"] else "notepad"
+        subprocess.run([sys.executable, str(HERE / "reset.py"), app], capture_output=True)
     proc = subprocess.run([sys.executable, str(LANE)], input=json.dumps(req), capture_output=True,
                           text=True, encoding="utf-8", timeout=180)
     return json.loads(proc.stdout)
@@ -66,8 +71,9 @@ for tid, req in TASKS.items():
         r = run(req)
         runs.append({"status": r.get("status"), "check": r.get("check"), "actions": r.get("actions"),
                      "run_s": (r.get("sec") or {}).get("run"), "wall_s": round(time.perf_counter() - started, 2),
-                     "cache": r.get("cache")})
-    ok = [r for r in runs if r["status"] == "SUBTASK_COMPLETE" and r["check"] is True]
+                     "cache": r.get("cache"), "check_before": r.get("check_before", False)})
+    # A run whose check already held before it started measured nothing.
+    ok = [r for r in runs if r["status"] == "SUBTASK_COMPLETE" and r["check"] is True and r["actions"]]
     results[tid] = {"success": f"{len(ok)}/{len(runs)}",
                     "median_run_s": round(statistics.median([r["run_s"] for r in ok]), 2) if ok else None,
                     "runs": runs}
