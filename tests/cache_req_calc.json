@@ -1,0 +1,4 @@
+{"target":"desktop","app":{"launch":"calc.exe","title":"Rechner"},
+ "subtask":{"goal":"Using the calculator buttons in exactly this order: Clear, 1, 2, Multiply, 1, 2, Equals",
+  "verification":["The calculator display shows 144"],"max_actions":10},
+ "check":"Anzeige lautet 144", "cache":true}

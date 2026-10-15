@@ -143,11 +143,33 @@ def _recorded_steps(history_dicts: list[dict]) -> list[dict]:
             for h in history_dicts]
 
 
+def _settle(backend, before_revision: str, timeout_s: float = 1.2):
+    """Wait for the UI to go quiet, mirroring the executor: cheap probe if the backend has one.
+
+    Full-revision polling was slower than blind sleeps (browser revisions keep changing),
+    so probe-less backends (Windows UIA, synchronous input) just take a short fixed pause.
+    """
+    probe = getattr(backend, "settle_probe", None)
+    if probe is None:
+        time.sleep(0.15)
+        return backend.observe()
+    deadline = time.perf_counter() + timeout_s
+    started = time.perf_counter()
+    last = object()
+    while time.perf_counter() < deadline:
+        current = probe()
+        if current == last and time.perf_counter() - started >= 0.09:
+            break
+        last = current
+        time.sleep(0.03)
+    return backend.observe()
+
+
 def _replay(backend, steps: list[dict]) -> None:
     """Re-execute a verified trajectory without any model call. Raises on any mismatch."""
+    snap = backend.observe()
     for s in steps:
         kind = ActionKind(s["action"])
-        snap = backend.observe()
         target = None
         if s.get("target_name") is not None:
             cands = [e for e in snap.elements if e.visible and e.enabled and e.name == s["target_name"] and kind in e.actions]
@@ -157,15 +179,18 @@ def _replay(backend, steps: list[dict]) -> None:
             if len(cands) > 1 and b:
                 cands.sort(key=lambda e: (abs(e.bounds.x - b["x"]) + abs(e.bounds.y - b["y"])) if e.bounds else 1e18)
             target = cands[0]
+        before = snap.revision
         backend.execute(snap, ExecutableAction(kind=kind, target_id=target.id if target else None,
                                                target_guard=target.semantic_guard() if target else None,
                                                value=s.get("value"), key=s.get("key"), hotkey=s.get("hotkey"),
                                                click_modifier=s.get("click_modifier"),
                                                scroll_direction=s.get("scroll_direction")))
-        time.sleep(0.3)  # executor normally waits for the UI to settle between steps
+        snap = _settle(backend, before)
         if kind == ActionKind.TYPE_TEXT and s.get("key"):  # runtime submits the key after the value lands
-            backend.execute(backend.observe(), ExecutableAction(kind=ActionKind.PRESS_KEY, key=s["key"]))
-            time.sleep(0.3)
+            before = snap.revision
+            backend.execute(snap, ExecutableAction(kind=ActionKind.PRESS_KEY, key=s["key"]))
+            snap = _settle(backend, before)
+
 
 
 
