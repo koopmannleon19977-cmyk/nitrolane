@@ -1,17 +1,17 @@
 ---
-name: arc-lane
+name: nitrolane
 description: Schnellspur für klar umrissene Browser- und Windows-Desktop-Teilaufgaben (Formular ausfüllen, Link/Artikel öffnen, Feld setzen, Buttons in Reihenfolge) über arc-cua + TypeSafe JEV — 1–6 s statt 20–70 s Subagent-Loop. Vor dem browser-/computer-Prelude versuchen.
 ---
 
-# arc-lane
+# nitrolane
 
 JEV wählt pro Schritt nur aus angebotenen Elementen und Operationen (~0,3 s/Entscheidung); Text kommt nur aus `inputs`. Ein Aufruf = eine Teilaufgabe; Ergebnis ist ein eingerücktes JSON-Objekt.
 
 ## Aufruf (git-bash)
 
 ```bash
-ARC="$HOME/arc-lane/vendor/arc-cua-windows/.venv/Scripts/python.exe"   # created by setup.ps1
-LANE="$HOME/arc-lane/arc_lane.py"
+ARC="$HOME/nitrolane/vendor/arc-cua-windows/.venv/Scripts/python.exe"   # created by setup.ps1
+LANE="$HOME/nitrolane/nitrolane.py"
 "$ARC" "$LANE" <<'EOF'
 {"target":"browser","url":"https://httpbin.org/forms/post",
  "subtask":{"goal":"Fill the pizza order form and submit it",
@@ -22,7 +22,7 @@ LANE="$HOME/arc-lane/arc_lane.py"
 EOF
 ```
 
-- `target:"browser"`: eigenes headless Chrome (Profil `%LOCALAPPDATA%\arc-lane`, Port 9333, Viewport 1280×2400), bleibt warm; nie das Chrome des Users. `"headed":true` nur beim Kaltstart wirksam.
+- `target:"browser"`: eigenes headless Chrome (Profil `%LOCALAPPDATA%\nitrolane`, Port 9333, Viewport 1280×2400), bleibt warm; nie das Chrome des Users. `"headed":true` nur beim Kaltstart wirksam.
 - `target:"desktop"`: `app` = `{"title":"<Teil des Fenstertitels>"}` (optional `"launch":"calc.exe"`) oder `{"pid":N}`. **Vordergrund**: bewegt echte Maus/Fokus — User vorher nicht mitten im Tippen stören; für Hintergrund-Bedienung stattdessen cua-driver.
 - `check` (Browser: JS-Ausdruck; Desktop: Text, der danach in Name/Wert eines Elements steht) unabhängig vom Modell prüfen lassen und immer mitgeben; Ergebnis in `"check"`. `extract` (Browser) liefert zusätzlich den Wert eines JS-Ausdrucks von der Ergebnis-Seite — Lesen und Prüfen im selben Aufruf. Niemals denselben Subtask erneut ausführen, nur um zu prüfen.
 - Optionen: `timeout_s` (90), `min_confidence` (0.45), `min_completion_confidence` (0.3), `min_margin`, `keep_tab`, `cache`.
@@ -54,4 +54,4 @@ EOF
 
 ## Wartung
 
-Battery: Fixture-Server `python -m http.server 8765 --bind 127.0.0.1` in `tools/arc-lane/tests/pages`, dann `"$ARC" tools/arc-lane/tests/battery.py` → `last_run.json`, mit der Rubrik in `battery.json` per jevify bewerten. Lokale Patches am Fork: `vendor/arc-cua-windows/LOCAL_PATCHES.md`.
+Battery: Fixture-Server `python -m http.server 8765 --bind 127.0.0.1` in `tests/pages`, dann `"$ARC" tests/battery.py` → `last_run.json`, mit der Rubrik in `battery.json` per jevify bewerten. Lokale Patches am Fork: `vendor/arc-cua-windows/LOCAL_PATCHES.md`.

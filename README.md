@@ -1,4 +1,4 @@
-# arc-lane
+# nitrolane
 
 A fast lane for bounded browser and Windows-desktop subtasks: one JSON request in,
 one verified JSON result out. A small decision model (TypeSafe JEV) picks each click
@@ -44,8 +44,8 @@ Prerequisites: Python 3.12+, Chrome, a TypeSafe API key in the user environment
 (`TYPESAFE_API_KEY`), git.
 
 ```powershell
-git clone <this repo> arc-lane
-cd arc-lane
+git clone <this repo> nitrolane
+cd nitrolane
 .\setup.ps1   # clones the pinned fork, applies patches/, builds the venv, runs smoke + tests
 ```
 
@@ -53,7 +53,7 @@ cd arc-lane
 
 ```bash
 ARC="vendor/arc-cua-windows/.venv/Scripts/python.exe"
-"$ARC" arc_lane.py <<'EOF'
+"$ARC" nitrolane.py <<'EOF'
 {"target":"browser","url":"https://httpbin.org/forms/post",
  "subtask":{"goal":"Fill the pizza order form and submit it",
   "inputs":{"name":"Max Muster","phone":"0123456","email":"max@example.com"},
@@ -66,7 +66,7 @@ EOF
 
 Desktop: `"target":"desktop","app":{"title":"Rechner","launch":"calc.exe"}` —
 foreground only (real mouse/focus move). Full contract and authoring rules:
-`omp/skills/arc-lane/SKILL.md`.
+`omp/skills/nitrolane/SKILL.md`.
 
 ## Tests
 
@@ -81,5 +81,5 @@ elevated windows; desktop is foreground-only. JEV is a hosted service (own key r
 
 ## License
 
-MIT for the arc-lane wrapper, tests and integration files. Upstream licenses and
+MIT for the nitrolane wrapper, tests and integration files. Upstream licenses and
 attribution: `THIRD_PARTY_NOTICES.md`.

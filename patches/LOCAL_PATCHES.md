@@ -1,6 +1,6 @@
-# Local patches (omp arc-lane), on top of GreenKeewi/arc-cua-windows 659696d
+# Local patches (nitrolane), on top of GreenKeewi/arc-cua-windows 659696d
 
-`git diff` is authoritative. Each patch came from a failing arc-lane battery run (`~/.omp/agent/tools/arc-lane/tests`).
+`git diff` is authoritative. Each patch came from a failing nitrolane battery run (`tests/` in this repo).
 
 | File | Change | Why (measured on Windows 11, German UI) |
 |---|---|---|
@@ -13,4 +13,4 @@
 | `policies/choice.py`, `safety.py` | Risky controls stay offered; the runtime still refuses them (NEEDS_AGENT naming the risk) | Hidden "Delete account" made JEV click "Save note" instead; hidden "Send me product updates" looped into BLOCKED |
 | `tests/…`, `tests/golden/…` | Tests for the above; goldens regenerated (`ARC_UPDATE_GOLDEN=1`) | |
 
-After pulling upstream: re-apply, run `python -m pytest -q`, then the arc-lane battery.
+After pulling upstream: re-apply, run `python -m pytest -q`, then the nitrolane battery.

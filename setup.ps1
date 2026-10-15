@@ -1,4 +1,4 @@
-# arc-lane setup: clone the pinned arc-cua-windows fork, apply local patches, build the venv, verify.
+# nitrolane setup: clone the pinned arc-cua-windows fork, apply local patches, build the venv, verify.
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Vendor = Join-Path $Root "vendor\arc-cua-windows"
@@ -17,4 +17,4 @@ if (-not (Test-Path $Py)) {
 }
 & $Py -m arc_cua windows-smoke
 & $Py -m pytest (Join-Path $Vendor "tests") -q -p no:cacheprovider --basetemp (Join-Path $Vendor ".pytest-tmp")
-Write-Host "OK. Set TYPESAFE_API_KEY in your user environment, then run arc_lane.py (see README)."
+Write-Host "OK. Set TYPESAFE_API_KEY in your user environment, then run nitrolane.py (see README)."

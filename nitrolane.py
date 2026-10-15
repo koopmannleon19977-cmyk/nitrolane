@@ -1,4 +1,4 @@
-"""arc-lane: run one bounded UI subtask with arc-cua + TypeSafe JEV, print one JSON object.
+"""nitrolane: run one bounded UI subtask with arc-cua + TypeSafe JEV, print one JSON object.
 
 Input: one JSON object on stdin (or a file path as argv[1]):
   {"target": "browser", "url": "https://...", "subtask": {...},
@@ -25,12 +25,12 @@ from arc_cua.policies import TypeSafeJevPolicy
 from arc_cua.runtime import RuntimeConfig
 from arc_cua.models import ActionKind, ExecutableAction
 
-CDP_PORT = int(os.environ.get("ARC_LANE_CDP_PORT", "9333"))
+CDP_PORT = int(os.environ.get("NITROLANE_CDP_PORT") or os.environ.get("ARC_LANE_CDP_PORT", "9333"))
 CDP = f"http://127.0.0.1:{CDP_PORT}"
-PROFILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "arc-lane" / "chrome-profile"
-CACHE_DIR = Path(os.environ.get("ARC_LANE_CACHE", Path(os.environ.get("LOCALAPPDATA", Path.home())) / "arc-lane" / "cache"))
+PROFILE = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "nitrolane" / "chrome-profile"
+CACHE_DIR = Path(os.environ.get("NITROLANE_CACHE") or os.environ.get("ARC_LANE_CACHE", Path(os.environ.get("LOCALAPPDATA", Path.home())) / "nitrolane" / "cache"))
 # Observation is viewport-only; a tall viewport saves SCROLL decisions (inventory row 57: 3/3 right vs. 0/3).
-WINDOW = os.environ.get("ARC_LANE_WINDOW", "1280,2400")
+WINDOW = os.environ.get("NITROLANE_WINDOW") or os.environ.get("ARC_LANE_WINDOW", "1280,2400")
 DETACH = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
 
 

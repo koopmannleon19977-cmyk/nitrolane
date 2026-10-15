@@ -1,4 +1,4 @@
-"""Regression battery for arc-lane: runs every task in battery.json, independent check per run.
+"""Regression battery for nitrolane: runs every task in battery.json, independent check per run.
 
 Usage (needs the fixture server: python -m http.server 8765 --bind 127.0.0.1 in tests/pages):
     <venv python> battery.py [task-id-prefix ...]
@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).parent
-LANE = HERE.parent / "arc_lane.py"
+LANE = HERE.parent / "nitrolane.py"
 spec = json.loads((HERE / "battery.json").read_text(encoding="utf-8").replace("{TESTS}", str(HERE).replace("\\", "\\\\")))
 prefixes = sys.argv[1:]
 results = {}
@@ -30,7 +30,7 @@ for tid, task in spec["tasks"].items():
         result["check"] = not result["check"]  # check names a forbidden effect; true now means it did not happen
     if task.get("close_fixture"):
         subprocess.run(["powershell", "-NoProfile", "-c", "Get-Process powershell -ErrorAction SilentlyContinue"
-                        " | ? MainWindowTitle -eq 'arc-lane fixture' | Stop-Process"], capture_output=True)
+                        " | ? MainWindowTitle -eq 'nitrolane fixture' | Stop-Process"], capture_output=True)
     results[tid] = {"expected": task["expected"], "req": task["req"], "result": result}
     ok = (result.get("status") == "SUBTASK_COMPLETE") == (task["expected"] == "complete") and result.get("check") is not False
     print(f"{'ok ' if ok else 'BAD'} {tid:28} {result.get('status')} check={result.get('check')} "

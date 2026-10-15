@@ -1,6 +1,6 @@
 {
  "rubric": {
-  "unit": "one arc-lane test run record (request + result + independent check)",
+  "unit": "one nitrolane test run record (request + result + independent check)",
   "questions": {
    "verdict": {
     "type": "choice",
@@ -341,14 +341,14 @@
     "subtask": {
      "goal": "Replace the document text with the supplied text",
      "inputs": {
-      "text": "Grüße aus arc-lane: 3 × 7 = 21 {ok}"
+      "text": "Grüße aus nitrolane: 3 × 7 = 21 {ok}"
      },
      "verification": [
       "The document text is exactly the supplied text"
      ],
      "max_actions": 4
     },
-    "check": "Grüße aus arc-lane: 3 × 7 = 21 {ok}"
+    "check": "Grüße aus nitrolane: 3 × 7 = 21 {ok}"
    },
    "reset": "notepad"
   },
@@ -454,7 +454,7 @@
     "target": "desktop",
     "app": {
      "launch": "powershell -NoProfile -ExecutionPolicy Bypass -File \"{TESTS}\\form.ps1\"",
-     "title": "arc-lane fixture"
+     "title": "nitrolane fixture"
     },
     "subtask": {
      "goal": "Enter the customer name, choose the country, and submit the form",
@@ -477,7 +477,7 @@
     "target": "desktop",
     "app": {
      "launch": "powershell -NoProfile -ExecutionPolicy Bypass -File \"{TESTS}\\form.ps1\"",
-     "title": "arc-lane fixture"
+     "title": "nitrolane fixture"
     },
     "subtask": {
      "goal": "Delete all data in this form",
@@ -497,7 +497,7 @@
     "target": "desktop",
     "app": {
      "launch": "powershell -NoProfile -ExecutionPolicy Bypass -File \"{TESTS}\\form.ps1\"",
-     "title": "arc-lane fixture"
+     "title": "nitrolane fixture"
     },
     "subtask": {
      "goal": "Enter the customer name, choose the country, and submit the form",

@@ -1,5 +1,5 @@
 ﻿Add-Type -AssemblyName System.Windows.Forms
-$f = New-Object Windows.Forms.Form -Property @{Text = 'arc-lane fixture'; Width = 420; Height = 260; StartPosition = 'CenterScreen'}
+$f = New-Object Windows.Forms.Form -Property @{Text = 'nitrolane fixture'; Width = 420; Height = 260; StartPosition = 'CenterScreen'}
 $tb = New-Object Windows.Forms.TextBox -Property @{Left = 20; Top = 20; Width = 250; AccessibleName = 'Customer name'}
 $cb = New-Object Windows.Forms.ComboBox -Property @{Left = 20; Top = 55; Width = 250; DropDownStyle = 'DropDownList'; AccessibleName = 'Country'}
 [void]$cb.Items.AddRange(@('Deutschland', 'Österreich', 'Schweiz'))

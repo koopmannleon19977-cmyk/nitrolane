@@ -1,6 +1,6 @@
 # Third-party notices
 
-arc-lane builds on two MIT projects. Their code is not vendored in this repository;
+nitrolane builds on two MIT projects. Their code is not vendored in this repository;
 `setup.ps1` clones them at a pinned commit and applies `patches/`.
 
 - **arc-cua** — https://github.com/shhivv/arc-cua — MIT License, Copyright (c) Shiv Shanmugam.
