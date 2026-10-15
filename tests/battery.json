@@ -429,6 +429,26 @@
    },
    "reset": "calc"
   },
+  "D5b_calc_add_steps": {
+   "expected": "complete",
+   "req": {
+    "target": "desktop",
+    "app": {
+     "launch": "calc.exe",
+     "title": "Rechner"
+    },
+    "subtask": {
+     "goal": "Clear the calculator, then compute 7 plus 8 using the calculator buttons",
+     "verification": [
+      "The calculator display shows 15"
+     ],
+     "max_actions": 10
+    },
+    "steps": ["Click the clear button", "Click 7", "Click plus", "Click 8", "Click equals"],
+    "check": "Anzeige lautet 15"
+   },
+   "reset": "calc"
+  },
   "D6_calc_mul_r2": {
    "expected": "complete",
    "req": {

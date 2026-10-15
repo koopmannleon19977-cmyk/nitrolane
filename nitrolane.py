@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -205,9 +206,15 @@ def _settle(backend, before_revision: str, timeout_s: float = 1.2):
     return backend.observe()
 
 
-def _replay(backend, steps: list[dict], inputs: dict) -> None:
-    """Re-execute a verified trajectory without any model call. Raises _ReplayFailed on any mismatch."""
+def _replay(backend, steps: list[dict], inputs: dict, heal=None) -> int:
+    """Re-execute a verified trajectory without model calls; returns how many steps were healed.
+
+    A step whose target name is gone (renamed/translated UI) is re-targeted by `heal` (one
+    model decision on that step only); its new name is written into `steps`. Raises
+    _ReplayFailed when a step can neither be found nor healed.
+    """
     snap = backend.observe()
+    healed = 0
     for i, s in enumerate(steps):
         try:
             kind = ActionKind(s["action"])
@@ -223,6 +230,9 @@ def _replay(backend, steps: list[dict], inputs: dict) -> None:
             target = None
             if name is not None:
                 cands = [e for e in snap.elements if e.visible and e.enabled and e.name == name and kind in e.actions]
+                if not cands and heal is not None and (fixed := heal(snap, kind, name)) is not None:
+                    cands, s["target_name"], s["target_bounds"] = [fixed], fixed.name, None
+                    healed += 1
                 if not cands:
                     raise LookupError(f"replay target not offered: {s['action']} {name!r}")
                 b = s.get("target_bounds")
@@ -242,6 +252,21 @@ def _replay(backend, steps: list[dict], inputs: dict) -> None:
                 snap = _settle(backend, before)
         except Exception as exc:
             raise _ReplayFailed(i, exc) from exc
+    return healed
+
+
+def _healer(make_policy, inputs: dict):
+    """One decision per broken step: which element now plays the recorded element's role."""
+    def heal(snap, kind, name):
+        sub = subtask_from_dict({"goal": f"{kind.value} the element that replaced {name!r} "
+                                         f"(the app's UI was renamed or translated)",
+                                 "inputs": inputs, "verification": [f"{kind.value} on that element was done"]})
+        d = make_policy().decide(subtask=sub, snapshot=snap, history=())
+        # Stricter than the 0.35 action gate: a wrong heal is written into the template.
+        if d.kind != kind or not d.target_id or (d.confidence or 0) < 0.6:
+            return None
+        return snap.element(d.target_id)
+    return heal
 
 
 class ChatChoiceTransport:
@@ -336,6 +361,49 @@ def _restore_foreground(hwnd: int) -> None:
     user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
 
 
+def _cua_background(backend, snapshot, action) -> bool:
+    """Background tier: UIA Invoke/Toggle/ValuePattern performed by the cua-driver daemon.
+
+    Measured on Win11: the same Invoke from nitrolane's own process lets Calculator/Notepad take
+    the foreground (the process holds foreground rights from the user's terminal), while the
+    cua-driver daemon has none, so the window stays behind (0 foreground samples). Keys are not
+    routed here: PostMessage keys/text into WinUI Notepad landed only in some focus states.
+    False = not handled (no cua-driver, unnamed/ambiguous target, keys, no UIA route); the
+    executor then takes its pattern/foreground path as before.
+    """
+    exe = shutil.which("cua-driver")
+    if not exe or action.kind not in (ActionKind.CLICK, ActionKind.SET_VALUE, ActionKind.TYPE_TEXT):
+        return False
+    try:
+        el = snapshot.element(action.target_id)
+    except KeyError:
+        return False
+    same = [e for e in snapshot.elements if e.role == el.role and e.name == el.name]
+    if not el.name or len(same) != 1 or el.role == "ComboBox":  # combos: select_option in the pattern path
+        return False
+    target = {"role": el.role.lower(), "name": el.name}
+    step = {"click": target} if action.kind == ActionKind.CLICK else {"set_value": {**target, "value": str(action.value)}}
+    args = {"pid": backend.pid, "window_id": backend.window_id, "steps": [step]}
+    proc = subprocess.run([exe, "run_steps", json.dumps(args)], capture_output=True, text=True,
+                          encoding="utf-8", timeout=20)
+    try:
+        res = json.loads(proc.stdout)
+    except ValueError:
+        return False
+    # Only semantic UIA routes count; a pixel/PostMessage fallback is unverifiable here.
+    if not res.get("ok") or "UIA" not in (res.get("steps") or [{}])[0].get("message", ""):
+        return False
+    if action.kind == ActionKind.CLICK:
+        return True
+    try:
+        ref = backend._refs[action.target_id]
+        ref = ref.live() if hasattr(ref, "live") else ref
+        landed = str(ref.iface_value.CurrentValue).replace("\r\n", "\n").replace("\r", "\n")
+    except Exception:
+        return False
+    return landed == str(action.value).replace("\r\n", "\n")
+
+
 def _doctor(argv: list[str]) -> int:
     """Report whether this machine can run nitrolane; never prints secret values.
 
@@ -353,6 +421,7 @@ def _doctor(argv: list[str]) -> int:
     checks["typesafe_key"] = bool(_user_env("TYPESAFE_API_KEY"))
     checks["provider"] = os.environ.get("NITROLANE_PROVIDER", "jev (default)")
     checks["cache_dir"] = str(CACHE_DIR)
+    checks["cua_driver_background"] = bool(shutil.which("cua-driver"))
     if sys.platform == "win32":
         try:
             from pywinauto import Desktop
@@ -429,7 +498,6 @@ def _ocr_action(backend, req: dict) -> dict:
         y = int(rect.top + hit[1] * (rect.height() / data["height"]))
         backend.adapter.foreground(backend.pid, backend.window_id)
         user32 = ctypes.windll.user32
-        pos = ctypes.wintypes.POINT() if hasattr(ctypes, "wintypes") else None
         user32.SetCursorPos(x, y)
         user32.mouse_event(0x0002, 0, 0, 0, 0)
         user32.mouse_event(0x0004, 0, 0, 0, 0)
@@ -445,14 +513,27 @@ def _ocr_action(backend, req: dict) -> dict:
     elif req.get("check"):
         result["check"] = _text_seen(backend, req["check"])
     return result
+
+
 def main() -> int:
     if sys.argv[1:2] == ["doctor"]:
         return _doctor(sys.argv[2:])
     raw = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else sys.stdin.read()
     try:
         req = json.loads(raw)
-        subtask = subtask_from_dict(req.get("subtask") or {"goal": f"OCR action on {req['ocr']['text']!r}",
-                                                            "verification": ["The OCR action completed"]})
+        spec = req.get("subtask") or {"goal": f"OCR action on {req['ocr']['text']!r}",
+                                      "verification": ["The OCR action completed"]}
+        subtask = subtask_from_dict(spec)
+        # "steps": ordered one-action sub-goals ("Click 7", "Click plus", ...), each run as its own
+        # decision with a budget of one action. Choice models pick goal parts in any order ("7 plus 8"
+        # -> 7, 8, plus in 3/3 runs; order hints in the goal did not fix it: 1/3, 0/3), and per-step
+        # completion checks failed on no-visible-change steps, so the final `check` is the verdict.
+        ordered = [subtask_from_dict({"goal": f"{s} (step {i} of {len(req['steps'])} towards: {spec['goal']})",
+                                      "inputs": spec.get("inputs") or {},
+                                      "verification": [f"Done: {s}"], "max_actions": 1})
+                   for i, s in enumerate(req.get("steps") or [], 1)]
+        if ordered and not req.get("check"):
+            raise ValueError('"steps" needs a "check": the final state is the only verdict')
         target = req["target"]
         if target not in ("browser", "desktop"):
             raise ValueError('target must be "browser" or "desktop"')
@@ -483,6 +564,8 @@ def main() -> int:
                 backend = ChromeBackend.connect(CDP, url=req.get("url", "about:blank"))
         else:
             backend = _desktop_backend(req.get("app") or {})
+            if req.get("background", True):
+                backend.adapter.background = _cua_background
     except Exception as exc:  # setup failures are reported, never raised into the caller's shell
         print(json.dumps({"type": "error", "error": f"{type(exc).__name__}: {exc}"}))
         return 1
@@ -498,33 +581,42 @@ def main() -> int:
             handled = True
         # Cache only verified work: no independent check, no recording and no replay.
         cache_path = _cache_path(req) if req.get("cache") and check and not handled else None
-        replayed, history_dicts = False, []
+        replayed, history_dicts, prefix, healed = False, [], [], 0
         if cache_path and cache_path.exists():
             steps = json.loads(cache_path.read_text(encoding="utf-8"))["steps"]
+            inputs = req["subtask"].get("inputs") or {}
             try:
-                _replay(backend, steps, req["subtask"].get("inputs") or {})
+                healed = _replay(backend, steps, inputs, heal=_healer(lambda: _policy(req), inputs))
                 replayed = True
                 out.update(status="SUBTASK_COMPLETE", reason=None, needs_input=None, actions=len(steps),
-                           steps=[f"{s['action']} {s.get('target_name')!r} (replay)" for s in steps], cache="hit")
+                           steps=[f"{s['action']} {s.get('target_name')!r} (replay)" for s in steps],
+                           cache="healed" if healed else "hit")
             except _ReplayFailed as failed:
                 # Delta fallback: the model continues from the state the replay reached.
                 # Only a browser that already navigated/submitted is reset to a clean page.
                 out["cache"] = "delta"
                 if target == "browser" and failed.done > 0:
                     backend.navigate(req.get("url", "about:blank"))
+                else:
+                    prefix = steps[:failed.done]  # still valid: the model only redoes the broken tail
         if not replayed and not handled:
             executor = DesktopExecutor(backend, _policy(req), config=config)
             transitions = req.get("transitions") or {}
             violated = None
-            if not transitions:
-                result = executor.run(subtask)
+            runs = []
+            if ordered:
+                for sub in ordered:  # exactly one executed action per step, else stop and hand back
+                    runs.append(executor.run(sub))
+                    if len(runs[-1].history) != 1:
+                        break
+            elif not transitions:
+                runs.append(executor.run(subtask))
             else:
                 # Verify expected state after specific actions, not just at the end:
                 # a right-looking screen after the wrong action is a failure (transition, not state).
-                result = None
                 for event in executor.run_iter(subtask):
                     if event.result is not None:
-                        result = event.result
+                        runs.append(event.result)
                         break
                     if event.record is not None and str(event.record.step) in transitions:
                         expr = transitions[str(event.record.step)]
@@ -535,13 +627,19 @@ def main() -> int:
                         if not ok:
                             violated = event.record.step
                             executor.cancel()
-            d = result_to_dict(result)
-            history_dicts = d["history"]
+            ds = [result_to_dict(r) for r in runs]
+            d = ds[-1]
+            history_dicts = [h for x in ds for h in x["history"]]
             out.update(status=d["status"], reason=d.get("reason"), needs_input=d.get("needs_input"),
-                       actions=d.get("actions_taken"), steps=[_step(h, rec) for h, rec in zip(d["history"], result.history)])
+                       actions=sum(x.get("actions_taken") or 0 for x in ds),
+                       steps=[_step(h, rec) for x, r in zip(ds, runs) for h, rec in zip(x["history"], r.history)])
             if violated is not None:
                 out.update(status="NEEDS_AGENT", reason=f"Transition check failed after step {violated}: {transitions[str(violated)]!r}",
                            transitions={"failed_step": violated})
+            if ordered:
+                done = len(runs) == len(ordered) and all(len(r.history) == 1 for r in runs)
+                out.update(status="SUBTASK_COMPLETE" if done else "NEEDS_AGENT", reason=None if done else
+                           f"Step {len(runs)} {req['steps'][len(runs) - 1]!r} did not run exactly one action: {d.get('reason')}")
             if cache_path and "cache" not in out:
                 out["cache"] = "miss"
         t2 = time.perf_counter()
@@ -554,10 +652,16 @@ def main() -> int:
                 out["extract"] = ev(req["extract"])
         elif check and not handled:
             out["check"] = _text_seen(backend, check)
+        if ordered and out.get("status") == "SUBTASK_COMPLETE" and out.get("check") is not True:
+            out.update(status="NEEDS_AGENT", reason="All steps ran but the check failed")
         if cache_path and out.get("check") is True and not replayed and out.get("status") == "SUBTASK_COMPLETE":
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(json.dumps({"steps": _recorded_steps(history_dicts, req["subtask"].get("inputs") or {})}, ensure_ascii=False), encoding="utf-8")
-            out["cache"] = "stored"
+            # A delta run stores kept prefix + the model's tail, so the next run is a full replay again.
+            fresh = prefix + _recorded_steps(history_dicts, req["subtask"].get("inputs") or {})
+            cache_path.write_text(json.dumps({"steps": fresh}, ensure_ascii=False), encoding="utf-8")
+            out["cache"] = "rebuilt" if out.get("cache") == "delta" else "stored"
+        elif cache_path and replayed and healed and out.get("check") is True:
+            cache_path.write_text(json.dumps({"steps": steps}, ensure_ascii=False), encoding="utf-8")  # healed names
         elif cache_path and replayed and out.get("check") is not True:
             cache_path.unlink(missing_ok=True)  # stale entry; state already changed, so hand back instead of re-running blind
             out.update(status="NEEDS_AGENT", reason="Cached replay ran but the check failed; entry deleted.", cache="stale")

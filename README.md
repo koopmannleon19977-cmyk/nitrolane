@@ -21,16 +21,18 @@ goal + inputs + check  ─────────────►  JEV decisions
 
 ## Measured, not promised
 
-27-task battery (browser + desktop, every run independently checked against the real
-UI state, Windows 11, 2026-10-15):
+28-task battery (browser + desktop, every run independently checked against the real
+UI state, Windows 11, 2026-10-15, judged with a frozen rubric):
 
 | Verdict | Count |
 |---|---:|
-| Verified success | 20 |
+| Verified success | 21 |
 | Correct handback (missing input asked, forbidden action refused) | 6 |
-| Missed a feasible task | 1 |
+| Missed a feasible task ("7 plus 8" as a plain goal; as `steps`: 3/3) | 1 |
 | False success | **0** |
 | Constraint violation | **0** |
+
+Plus 11 v0.4 feature runs (background focus, self-healing, ordered steps): all verified.
 
 | Task | Model loop | Replay (0 model calls) |
 |---|---:|---:|
@@ -42,6 +44,11 @@ Browser median over the battery: 1.4 s per subtask · desktop median: 5.0 s.
 Reproduce them yourself: `tests/battery.py` (see [Tests](#tests)).
 
 ## Demo
+
+![Calculator: decision-model run, then a zero-model cached replay](docs/demo.gif)
+
+*Real recording: first run 7 decisions (6.6 s), second run the cached template (2.6 s,
+0 model calls) — both in the background, the user's window kept focus.*
 
 ```bash
 "$ARC" nitrolane.py <<'EOF'
@@ -82,17 +89,28 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
 - **Record-and-replay cache**: verified trajectories are stored as *parameterized
   templates* (input values become variables) and re-executed by element name +
   geometry with semantic guards and probe-based settling — the same workflow with
-  new data still costs zero model calls. A replay that breaks mid-way hands the
-  reached state to the model (delta fallback); a failed post-replay check deletes
-  the entry.
+  new data still costs zero model calls. **Self-healing:** when a recorded element was
+  renamed or translated, only that step costs one decision (gate 0.6) and the fixed
+  name is written back — measured: German→English-renamed calculator template healed
+  in 3.7 s, next run a 2.6 s zero-model replay again. A step that cannot be healed
+  hands the reached state to the model and the template is rebuilt; a failed
+  post-replay check deletes the entry.
 - **Provider freedom**: TypeSafe JEV by default, OpenAI Decisions, or any
   OpenAI-compatible chat endpoint (OpenAI, OpenRouter, Ollama, LM Studio) behind
   one finite-choice transport — plus an MCP server (`nitrolane_mcp.py`) and a
   `doctor` mode for instant setup diagnostics (`doctor --deep` sends one real choice
   decision, so a broken key/endpoint/model fails here instead of on your first run).
-- **Pattern-first desktop**: clicks/values go through UIA patterns
-  (Invoke/Toggle/SelectionItem/ValuePattern) before any pointer or foreground
-  activation, and your original foreground window is restored when the run ends.
+- **True background desktop** (with [cua-driver](https://github.com/trycua/cua) on
+  PATH): clicks and values on named elements are performed by the cua-driver daemon.
+  Measured: the same UIA Invoke from nitrolane's own process let Calculator and
+  Notepad grab the foreground (271 and 109 foreign-foreground samples at 10 ms);
+  through the daemon, which holds no foreground rights, **0 samples** — your window
+  never loses focus. Costs ~0.3 s per action; `"background": false` opts out.
+  Without cua-driver: pattern-first UIA, foreground restored at the end.
+- **Ordered steps** (`"steps": ["Click 7", "Click plus", ...]`): order-sensitive
+  goals run as one decision per step. Measured: "7 plus 8" as a plain goal 0/3
+  (choice models pick goal parts in any order; order hints in the goal 1/3, 0/3),
+  as steps **3/3**. The final `check` is the verdict.
 - **Transition verification**: optional per-step expectations stop a run whose
   intermediate state is wrong — even if the final screen would have looked right.
 - **Parallel fleet** (`nitrolane_fleet.py`): many subtasks in one call — browser tabs
@@ -117,7 +135,7 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
   gates for actions (0.35) and completions (0.30) — derived from battery data:
   multi-field tasks split confidence across equally valid first steps, so the gate
   sits below correct-but-ambiguous actions and above the observed wrong targets.
-- **The verification methodology**: a 27-task battery where success is only counted
+- **The verification methodology**: a 28-task battery where success is only counted
   when an independent check against the real UI agrees (`tests/`).
 
 Details and per-change measurements: [`patches/README.md`](patches/README.md).
@@ -127,7 +145,9 @@ Details and per-change measurements: [`patches/README.md`](patches/README.md).
 Prerequisites: Python 3.12+, Chrome, git, and a decision provider —
 a [TypeSafe](https://typesafe.com) key (`TYPESAFE_API_KEY`, default), an OpenAI
 Decisions key, or any OpenAI-compatible chat endpoint (set
-`NITROLANE_PROVIDER=chat`, `NITROLANE_MODEL`, `NITROLANE_BASE_URL`).
+`NITROLANE_PROVIDER=chat`, `NITROLANE_MODEL`, `NITROLANE_BASE_URL`). Optional:
+[cua-driver](https://github.com/trycua/cua) on `PATH` for background desktop control
+(`doctor` reports `cua_driver_background`).
 
 One command (PowerShell):
 
@@ -155,9 +175,9 @@ vendor\arc-cua-windows\.venv\Scripts\python.exe nitrolane.py doctor
   opted in via `allowed_risks`. Low-confidence decisions hand back (`NEEDS_AGENT`)
   instead of guessing. Secrets stay hidden from the model via `secret_inputs`.
 - **Browser:** one warm headless Chrome, CDP, 1280×2400 viewport so most content
-  needs no scrolling decisions. **Desktop:** Windows UIA, pattern-first — clicks and
-  values go through accessibility patterns without moving your pointer; keys and
-  focus-clicks briefly come to the front, and your original window gets focus back.
+  needs no scrolling decisions. **Desktop:** Windows UIA; with cua-driver, clicks and
+  values run in the background without touching your focus; keys and unnamed or
+  ambiguous targets briefly come to the front, and your original window gets focus back.
 
 Full contract and hard-won authoring rules (from the battery):
 [`omp/skills/nitrolane/SKILL.md`](omp/skills/nitrolane/SKILL.md). The `omp/` folder
@@ -167,18 +187,18 @@ route bounded subtasks to nitrolane first.
 ## Limitations
 
 Preview quality, measured on one Windows 11 machine (German UI). Not for logins/2FA,
-payments, uploads, drag & drop, canvas/graphics or cross-origin iframes. Desktop
-input is pattern-first and your foreground window is restored afterwards, but keys
-and focus clicks still come to the front briefly, and UWP apps self-activate on
-Invoke; for true background control pair it with
-[cua-driver](https://github.com/trycua/cua). The default JEV provider is a hosted
+payments, uploads, drag & drop or cross-origin iframes; canvas only via the OCR last
+resort. Keys (Enter, shortcuts) still need the foreground: PostMessage keys into WinUI
+Notepad landed only in some focus states and modifier chords not at all (measured), so
+nitrolane does not send them in the background. Natural-language order ("7 plus 8")
+is unreliable with choice models — use `steps`. The default JEV provider is a hosted
 service — or bring your own model (see Install).
 
 ## Tests & benchmark
 
 ```powershell
 # fixture server, in tests/pages:  python -m http.server 8765 --bind 127.0.0.1
-vendor\arc-cua-windows\.venv\Scripts\python.exe tests\battery.py   # 27-task regression battery
+vendor\arc-cua-windows\.venv\Scripts\python.exe tests\battery.py   # 28-task regression battery
 vendor\arc-cua-windows\.venv\Scripts\python.exe tests\bench.py     # public micro-benchmark -> tests/bench_result.json
 ```
 
@@ -191,8 +211,7 @@ gets the whole lane as one tool call.
 
 ## Roadmap
 
-- Background desktop input pairing (cua-driver)
-- OCR fallback for canvas/custom-drawn UIs
+- Background keys through a verified input channel
 - Trajectory cache sharing across machines
 - Public benchmark runs (OSWorld/WebArena-style scoring)
 

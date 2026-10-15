@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.4.0 — 2026-10-15
+
+- **True background desktop** via cua-driver (when on PATH; `"background": false`
+  opts out): clicks and values on uniquely named elements run in the cua-driver
+  daemon, which holds no foreground rights, so UWP/WinUI apps cannot activate
+  themselves. Measured with a 10 ms foreground sampler (`tests/test_background.py`):
+  Notepad 109 → **0** and Calculator 271 → **0** foreign-foreground samples; cost
+  ~0.3 s per action. Keys stay on the foreground path (PostMessage keys into WinUI
+  Notepad landed only in some focus states, modifier chords never).
+- **Ordered steps** (`"steps"` + required `check`): one decision per step, one
+  action each. "7 plus 8": plain goal 0/3, goal with order hints 1/3 and 0/3, as
+  steps 3/3.
+- **Self-healing replay**: a template step whose element was renamed/translated is
+  re-targeted by one decision (gate 0.6) and written back (`cache: healed`); measured
+  3.7 s heal run, then 2.6 s zero-model replay. An unhealable step falls back to the
+  model and the template is rebuilt (`cache: rebuilt`), including the kept prefix.
+- `doctor --deep`: sends one real choice decision (measured: CLICK at 0.99 in 2.3 s),
+  so a broken key/endpoint/model surfaces during setup rather than on the first task.
+- Fork hook (`patches/`): `adapter.background(backend, snapshot, action)` runs before
+  the pattern path.
+- Docs: demo GIF (`docs/demo.gif`) and social preview (`docs/social-preview.png`).
+- Verification: 28 battery tasks + 11 feature runs judged → 32 verified, 6 correct
+  handbacks, 1 known miss, 0 false successes, 0 constraint violations.
+
 ## v0.3.0 — 2026-10-15
 
 - **Parallel fleet** (`nitrolane_fleet.py`): batch subtasks; browser in parallel tabs,
@@ -21,8 +45,6 @@
   cached, fleet 4/4 in 10.19 s.
 - Fork fix in `patches/`: transient-UIA-read retry — a dropdown/dialog transition
   could raise COMError and abort a run.
-- `doctor --deep`: sends one real choice decision (measured: CLICK at 0.99 in 2.3 s),
-  so a broken key/endpoint/model surfaces during setup rather than on the first task.
 - Verification: 41 records judged (battery + P1 features) → 33 verified successes,
   7 correct handbacks, 1 known miss (natural-order calculator task), 0 false
   successes, 0 constraint violations.

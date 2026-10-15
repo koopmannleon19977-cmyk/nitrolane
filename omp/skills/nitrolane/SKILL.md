@@ -23,10 +23,10 @@ EOF
 ```
 
 - `target:"browser"`: eigenes headless Chrome (Profil `%LOCALAPPDATA%\nitrolane`, Port 9333, Viewport 1280×2400), bleibt warm; nie das Chrome des Users. `"headed":true` nur beim Kaltstart wirksam.
-- `target:"desktop"`: `app` = `{"title":"<Teil des Fenstertitels>"}` (optional `"launch":"calc.exe"`) oder `{"pid":N}`. Pattern-first (Invoke/Value ohne Maus), Vordergrund nur als Fallback für Tasten/Fokus-Klicks; das ursprüngliche Fenster des Users wird am Ende wieder in den Vordergrund geholt. Trotzdem nicht mitten in User-Eingaben starten; echtes Hintergrund-Arbeiten via cua-driver.
+- `target:"desktop"`: `app` = `{"title":"<Teil des Fenstertitels>"}` (optional `"launch":"calc.exe"`) oder `{"pid":N}`. Mit `cua-driver` im PATH laufen Klicks/Werte auf eindeutig benannten Elementen im Hintergrund (gemessen 0 Fokuswechsel bei Rechner und Notepad, ~0,3 s/Aktion mehr; `"background":false` schaltet ab). Tasten und unbenannte/mehrdeutige Ziele brauchen kurz den Vordergrund; das Fenster des Users wird am Ende wiederhergestellt.
 - `check` (Browser: JS-Ausdruck; Desktop: Text, der danach in Name/Wert eines Elements steht) unabhängig vom Modell prüfen lassen und immer mitgeben; Ergebnis in `"check"`. `extract` (Browser) liefert zusätzlich den Wert eines JS-Ausdrucks von der Ergebnis-Seite — Lesen und Prüfen im selben Aufruf. Niemals denselben Subtask erneut ausführen, nur um zu prüfen.
-- Optionen: `timeout_s` (90), `min_confidence` (0.45), `min_completion_confidence` (0.3), `min_margin`, `keep_tab`, `cache`, `provider`, `transitions`.
-- `"cache":true` (nur mit `check`): verifizierte Trajektorie wird als parametrisiertes Template gespeichert (Input-Werte als Variablen) und bei gleicher Aufgabe — auch mit anderen Eingabewerten — ohne Modell-Calls replayt (`cache: hit|stored|stale|delta`). Gemessen: Browser 4,7→1,3 s, Notepad 3,98→0,46 s, Rechner 6,4→3,8 s. Schlägt der Check nach Replay fehl, wird der Eintrag gelöscht und NEEDS_AGENT gemeldet; bricht das Replay mittendrin ab, vollendet das Modell ab dem erreichten Zustand (Delta).
+- Optionen: `timeout_s` (90), `min_confidence` (0.35), `min_completion_confidence` (0.3), `min_margin`, `keep_tab`, `cache`, `provider`, `transitions`, `steps`, `background`.
+- `"cache":true` (nur mit `check`): verifizierte Trajektorie wird als parametrisiertes Template gespeichert (Input-Werte als Variablen) und bei gleicher Aufgabe — auch mit anderen Eingabewerten — ohne Modell-Calls replayt (`cache: hit|stored|healed|rebuilt|stale|delta`). Umbenannte/übersetzte Elemente heilt eine Einzelentscheidung pro Schritt (`healed`, gemessen 3,7 s, danach wieder 2,6 s ohne Modell); nicht heilbare Schritte vollendet das Modell und das Template wird neu geschrieben (`rebuilt`). Schlägt der Check nach Replay fehl, wird der Eintrag gelöscht und NEEDS_AGENT gemeldet.
 - `provider`: `{"name":"jev"}` (Standard) oder `{"name":"chat","model":"…","base_url":"…","api_key_env":"…"}` für jeden OpenAI-kompatiblen Endpoint (OpenAI/OpenRouter/Ollama/LM Studio), oder `{"name":"openai"}` für die OpenAI Decisions API. Env: `NITROLANE_PROVIDER/MODEL/BASE_URL`.
 - `transitions`: `{"<Schrittnummer>":"<Check-Ausdruck>"}` — erwarteter Zustand nach genau dieser Aktion; Verletzung stoppt mit NEEDS_AGENT, auch wenn der Endzustand gut aussähe.
 - Desktop-Läufe stellen das ursprüngliche Vordergrundfenster des Users am Ende wieder her. `nitrolane.py doctor` prüft die Maschine; `nitrolane_mcp.py` stellt `nitrolane_run`/`nitrolane_doctor` als MCP-Tools bereit.
@@ -50,14 +50,14 @@ EOF
 ## Aufgaben so formulieren (aus der Testbatterie belegt)
 
 - Jede Anforderung als eigenes `verification`-Kriterium; Kriterien auf `inputs` beziehen („The document text is exactly the supplied text“) statt umschreiben — „three lines ending with …“ verwarf JEV trotz richtigem Text.
-- Reihenfolgen explizit: „Using the buttons in exactly this order: Clear, 7, Plus, 8, Equals“. „compute 7 plus 8“ klickte 7, 8, Plus, Gleich.
+- Reihenfolgen als `steps` (Pflicht: `check`): `"steps":["Click the clear button","Click 7","Click plus","Click 8","Click equals"]` — je Schritt genau eine Aktion, gemessen 3/3. „compute 7 plus 8“ als Ziel klickte 7, 8, Plus (0/3); Reihenfolge-Hinweise im Ziel halfen nicht (1/3, 0/3).
 - Jeder Literalwert in `inputs`; im `goal` erwähnter Text wird nie getippt.
 - Risiko-Wörter wirken auf ganze Wörter im Label, auch falsch-positiv: Checkbox „Send me product updates“ braucht `allowed_risks:["send"]`.
 - Nicht für: Logins/2FA/Zahlung, Uploads, Drag&Drop, Canvas/Spiele, Cross-Origin-iframes, minimierte/gesperrte/elevated Fenster.
 
-## Messwerte (Win 11, 2026-10-15, Battery 27 Läufe, jevify-geprüft)
+## Messwerte (Win 11, 2026-10-15, Battery 28 Läufe + 11 Feature-Läufe, jevify-geprüft)
 
-26/27 korrekt (20 verifiziert erledigt, 6 korrekte Rückgaben, 0 Falsch-Erfolge, 0 Regelverstöße); einziger Fehlgriff: „7 plus 8“ ohne explizite Reihenfolge. Laufzeit: Link/Artikel 1–3 s, Formular mit 6 Feldern 4,5 s, Notepad-Text 1,8 s, 7 Rechner-Klicks 5,9 s, zzgl. ~0,6 s Prozessstart und 0,5–1,5 s Seitenladen.
+38/39 korrekt (32 verifiziert erledigt, 6 korrekte Rückgaben, 0 Falsch-Erfolge, 0 Regelverstöße); einziger Fehlgriff: „7 plus 8“ als reines Ziel (mit `steps` 3/3). Laufzeit: Link/Artikel 1–3 s, Formular mit 6 Feldern 4,8–5,1 s, Notepad-Text 2,2 s, 7 Rechner-Klicks 6,5 s, zzgl. ~0,7 s Prozessstart und 0,5–1,5 s Seitenladen.
 
 ## Wartung
 

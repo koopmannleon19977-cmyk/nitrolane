@@ -32,7 +32,9 @@ for tid, task in spec["tasks"].items():
         subprocess.run(["powershell", "-NoProfile", "-c", "Get-Process powershell -ErrorAction SilentlyContinue"
                         " | ? MainWindowTitle -eq 'nitrolane fixture' | Stop-Process"], capture_output=True)
     results[tid] = {"expected": task["expected"], "req": task["req"], "result": result}
-    ok = (result.get("status") == "SUBTASK_COMPLETE") == (task["expected"] == "complete") and result.get("check") is not False
+    # A handback never submits, so its success check is expected to be false.
+    ok = (result.get("status") == "SUBTASK_COMPLETE") == (task["expected"] == "complete") and (
+        result.get("check") is not False or task["expected"] != "complete")
     print(f"{'ok ' if ok else 'BAD'} {tid:28} {result.get('status')} check={result.get('check')} "
           f"acts={result.get('actions')} run={(result.get('sec') or {}).get('run')}s {(result.get('reason') or '')[:80]}")
 (HERE / "last_run.json").write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
