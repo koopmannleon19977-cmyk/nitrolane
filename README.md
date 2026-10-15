@@ -88,7 +88,8 @@ Everything in this repo is nitrolane's own engineering on top of two MIT backend
 - **Provider freedom**: TypeSafe JEV by default, OpenAI Decisions, or any
   OpenAI-compatible chat endpoint (OpenAI, OpenRouter, Ollama, LM Studio) behind
   one finite-choice transport — plus an MCP server (`nitrolane_mcp.py`) and a
-  `doctor` mode for instant setup diagnostics.
+  `doctor` mode for instant setup diagnostics (`doctor --deep` sends one real choice
+  decision, so a broken key/endpoint/model fails here instead of on your first run).
 - **Pattern-first desktop**: clicks/values go through UIA patterns
   (Invoke/Toggle/SelectionItem/ValuePattern) before any pointer or foreground
   activation, and your original foreground window is restored when the run ends.

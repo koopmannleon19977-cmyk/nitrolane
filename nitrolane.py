@@ -23,7 +23,7 @@ from arc_cua import DesktopExecutor
 from arc_cua.api import result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
 from arc_cua.runtime import RuntimeConfig
-from arc_cua.models import ActionKind, ExecutableAction
+from arc_cua.models import ActionKind, DesktopElement, DesktopSnapshot, ExecutableAction
 
 CDP_PORT = int(os.environ.get("NITROLANE_CDP_PORT") or os.environ.get("ARC_LANE_CDP_PORT", "9333"))
 CDP = f"http://127.0.0.1:{CDP_PORT}"
@@ -336,8 +336,12 @@ def _restore_foreground(hwnd: int) -> None:
     user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
 
 
-def _doctor() -> int:
-    """Report whether this machine can run nitrolane; never prints secret values."""
+def _doctor(argv: list[str]) -> int:
+    """Report whether this machine can run nitrolane; never prints secret values.
+
+    `doctor --deep` also sends one real choice decision to the provider, so a broken
+    key/endpoint/model shows up here instead of as the first run's ERROR.
+    """
     checks: dict = {"python": sys.version.split()[0]}
     try:
         from arc_cua.backends.cdp import find_chrome
@@ -357,6 +361,20 @@ def _doctor() -> int:
         except Exception as exc:
             checks["uia_windows"] = f"unavailable ({type(exc).__name__})"
     ok = isinstance(checks["chrome"], str) and not checks["chrome"].startswith("missing") and checks["typesafe_key"]
+    if "--deep" in argv:
+        try:
+            policy = _policy({})
+            answer = policy.decide(subtask=subtask_from_dict({
+                "goal": "Pick the first offered option", "verification": ["A choice was made"]}),
+                snapshot=DesktopSnapshot(application="doctor", window="doctor", revision="r",
+                                         elements=(DesktopElement(id="d1", role="Button", name="OK",
+                                                                  actions=(ActionKind.CLICK,)),)),
+                history=())
+            checks["deep_decision"] = {"choice": answer.kind.value if answer.kind else answer.terminal.value,
+                                       "confidence": answer.confidence}
+        except Exception as exc:
+            checks["deep_decision"] = f"failed ({type(exc).__name__}: {str(exc)[:120]})"
+            ok = False
     checks["ok"] = bool(ok)
     print(json.dumps(checks, ensure_ascii=False, indent=1))
     return 0 if ok else 1
@@ -428,8 +446,8 @@ def _ocr_action(backend, req: dict) -> dict:
         result["check"] = _text_seen(backend, req["check"])
     return result
 def main() -> int:
-    if sys.argv[1:] == ["doctor"]:
-        return _doctor()
+    if sys.argv[1:2] == ["doctor"]:
+        return _doctor(sys.argv[2:])
     raw = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else sys.stdin.read()
     try:
         req = json.loads(raw)

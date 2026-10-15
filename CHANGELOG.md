@@ -21,6 +21,8 @@
   cached, fleet 4/4 in 10.19 s.
 - Fork fix in `patches/`: transient-UIA-read retry — a dropdown/dialog transition
   could raise COMError and abort a run.
+- `doctor --deep`: sends one real choice decision (measured: CLICK at 0.99 in 2.3 s),
+  so a broken key/endpoint/model surfaces during setup rather than on the first task.
 - Verification: 41 records judged (battery + P1 features) → 33 verified successes,
   7 correct handbacks, 1 known miss (natural-order calculator task), 0 false
   successes, 0 constraint violations.
