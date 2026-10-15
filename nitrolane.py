@@ -11,7 +11,7 @@ Exit code 0 whenever a result line was printed (whatever its status); 2 invalid 
 """
 from __future__ import annotations
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 
 import hashlib
 import json
@@ -25,6 +25,7 @@ from pathlib import Path
 from arc_cua import DesktopExecutor
 from arc_cua.api import result_to_dict, subtask_from_dict
 from arc_cua.policies import TypeSafeJevPolicy
+from arc_cua.errors import StaleDesktopState
 from arc_cua.runtime import RuntimeConfig
 from arc_cua.models import ActionKind, DesktopElement, DesktopSnapshot, ExecutableAction
 
@@ -285,7 +286,16 @@ def _replay(backend, steps: list[dict], inputs: dict, heal=None) -> int:
                 value = inputs[value["$input"]]
             target = None
             if name is not None:
-                cands = [e for e in snap.elements if e.visible and e.enabled and e.name == name and kind in e.actions]
+                def offered(sn):
+                    return [e for e in sn.elements if e.visible and e.enabled and e.name == name and kind in e.actions]
+                # No fixed settle after each step: observe once, and only poll while the next target
+                # is not there yet (a dialog opening, a page loading). Measured settle cost was
+                # 0.06-0.15 s per step, now paid only by steps that actually wait.
+                cands, deadline = offered(snap), time.perf_counter() + 1.5
+                while not cands and time.perf_counter() < deadline:
+                    time.sleep(0.03)
+                    snap = backend.observe()
+                    cands = offered(snap)
                 if not cands and heal is not None and (fixed := heal(snap, kind, name)) is not None:
                     cands, s["target_name"], s["target_bounds"] = [fixed], fixed.name, None
                     healed += 1
@@ -295,17 +305,26 @@ def _replay(backend, steps: list[dict], inputs: dict, heal=None) -> int:
                 if len(cands) > 1 and b:
                     cands.sort(key=lambda e: (abs(e.bounds.x - b["x"]) + abs(e.bounds.y - b["y"])) if e.bounds else 1e18)
                 target = cands[0]
-            before = snap.revision
-            backend.execute(snap, ExecutableAction(kind=kind, target_id=target.id if target else None,
-                                                   target_guard=target.semantic_guard() if target else None,
-                                                   value=value, key=s.get("key"), hotkey=s.get("hotkey"),
-                                                   click_modifier=s.get("click_modifier"),
-                                                   scroll_direction=s.get("scroll_direction")))
-            snap = _settle(backend, before)
+            action = ExecutableAction(kind=kind, target_id=target.id if target else None,
+                                      target_guard=target.semantic_guard() if target else None,
+                                      value=value, key=s.get("key"), hotkey=s.get("hotkey"),
+                                      click_modifier=s.get("click_modifier"),
+                                      scroll_direction=s.get("scroll_direction"))
+            try:
+                backend.execute(snap, action)
+            except StaleDesktopState:
+                # The UI was still moving when observed (no settle anymore): act once on a fresh view.
+                import dataclasses
+
+                snap = backend.observe()
+                fresh = next((e for e in snap.elements if target and e.name == target.name and kind in e.actions), None)
+                if fresh is not None:
+                    action = dataclasses.replace(action, target_id=fresh.id, target_guard=fresh.semantic_guard())
+                backend.execute(snap, action)
+            snap = backend.observe()
             if kind == ActionKind.TYPE_TEXT and s.get("key"):  # runtime submits the key after the value lands
-                before = snap.revision
                 backend.execute(snap, ExecutableAction(kind=ActionKind.PRESS_KEY, key=s["key"]))
-                snap = _settle(backend, before)
+                snap = backend.observe()
         except Exception as exc:
             raise _ReplayFailed(i, exc) from exc
     return healed
@@ -430,6 +449,11 @@ class _CuaSession:
 
     SESSION = "nitrolane"
 
+    @staticmethod
+    @__import__("functools").cache
+    def exe() -> str | None:
+        return shutil.which("cua-driver")  # PATH scan cost ~12 ms per action before caching
+
     _lock = __import__("threading").Lock()
     _proc = None
     _next_id = 0
@@ -504,7 +528,16 @@ def _cua_background(backend, snapshot, action) -> bool:
     False = not handled (no cua-driver, unnamed/ambiguous target, keys, no UIA route); the
     executor then takes its pattern/foreground path as before.
     """
-    exe = shutil.which("cua-driver")
+    if action.kind == ActionKind.PRESS_KEY:
+        # A TAB that only moves focus after a typed value: the value was set through a UIA
+        # pattern and later steps target elements by pattern too, so the focus move is not
+        # needed, and sending it was the only thing that brought a background form to the
+        # front (measured: 0 -> ~110-150 foreground samples per replay). ENTER etc. still run.
+        skip = action.key == "TAB" and getattr(backend, "_nl_tab_after_value", False)
+        backend._nl_tab_after_value = False
+        return skip
+    backend._nl_tab_after_value = action.kind == ActionKind.TYPE_TEXT and action.key == "TAB"
+    exe = _CuaSession.exe()
     if not exe or action.kind not in (ActionKind.CLICK, ActionKind.SET_VALUE, ActionKind.TYPE_TEXT):
         return False
     try:

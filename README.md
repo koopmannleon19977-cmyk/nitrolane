@@ -54,21 +54,21 @@ time · correct runs · in-front samples. Scripts and raw data: [`tests/h2h/`](t
 
 | Tool | Notepad | Calculator | Form |
 |---|---|---|---|
-| nitrolane, CLI per call — model run | 4.4 s · 1/1 · 0 | 9.4 s · 1/1 · 0 | 6.9 s · 1/1 · 345 |
-| nitrolane, CLI per call — replay | 2.9 s · 3/3 · 0 | 4.8 s · 3/3 · 0 | 4.4 s · 3/3 · 151–153 |
-| nitrolane MCP server (warm) — model run | 3.8 s · 1/1 · 0 | 7.5 s · 1/1 · 0 | 5.0 s · 1/1 · 343 |
-| nitrolane MCP server (warm) — replay | 1.2 s · 3/3 · 0 | 3.3 s · 3/3 · 0 | 2.7 s · 3/3 · 151–152 |
+| nitrolane, CLI per call — model run | 4.6 s · 1/1 · 0 | 9.6 s · 1/1 · 0 | 6.8 s · 1/1 · 0 |
+| nitrolane, CLI per call — replay | 2.7 s · 3/3 · 0 | 4.0 s · 3/3 · 0 | 3.9 s · 3/3 · 0 |
+| nitrolane MCP server (warm) — model run | 3.9 s · 1/1 · 0 | 7.3 s · 1/1 · 0 | 5.1 s · 1/1 · 0 |
+| nitrolane MCP server (warm) — replay | 1.0 s · 3/3 · 0 | 2.5 s · 3/3 · 0 | 2.1 s · 3/3 · 0 |
 | [desktop-touch-mcp](https://github.com/Harusame64/desktop-touch-mcp) 2.3.1, ids given, no model | **0.49 s** · 3/3 · 0–49 | **1.1 s** · 3/3 · 0 | **0.85 s** · 3/3 · 0 |
 | [terminator-mcp-agent](https://github.com/mediar-ai/terminator), ids given, no model | 1.2 s · 3/3 · 36–42 | 45 s · 3/3 · ~4,340 | 1.8 s · **0/3** · 97–124 |
 | [Windows-MCP](https://github.com/CursorTouch/Windows-MCP), coordinates given, no model | 5.4 s · 2/3 · 0–469 | 5.1 s · 3/3 · ~433 | 13.7 s · 3/3 · ~1,255 |
 
 What this says, without spin:
-- **desktop-touch-mcp executes fastest** when an agent already knows the element ids: 2.5–3×
-  faster than nitrolane's warm replay, and it kept the apps behind the user's window. The
+- **desktop-touch-mcp executes fastest** when an agent already knows the element ids: about
+  2–2.5× faster than nitrolane's warm replay (v0.6), and it kept the apps behind the user's window. The
   competitors' rows contain no decisions at all — in real use an LLM agent must find those
   ids first; nitrolane's model rows include every decision and the independent check.
-- nitrolane never brought Notepad or Calculator to the front; the form task does (the replay
-  sends a Tab key and selects the drop-down from its own process — both foreground paths).
+- Since v0.6 nitrolane brings none of the three apps to the front, model runs included (v0.5.1:
+  ~150 samples per form replay, from the focus-moving Tab key it no longer sends).
 - terminator failed the form in 3/3 runs (`Option 'Österreich' not found in dropdown`) and
   needs 6.4 s per Calculator click (it searches `ApplicationFrameHost`); Windows-MCP drives
   the real mouse and hands control back on any user input (`CONTROL_UNAVAILABLE` in one run).
@@ -270,8 +270,7 @@ auth for it) — same trust boundary as your user account.
 
 ## Roadmap
 
-- Replay without a settle wait per step (head-to-head: desktop-touch-mcp executes 2.5–3× faster)
-- Form tasks fully in the background: no Tab key and no in-process drop-down selection
+- Fewer UIA reads per replayed step (now one read for the stale-state guard plus one per step; desktop-touch-mcp, given ids, executes ~2× faster)
 - Background keys through a verified input channel
 - Public WindowsAgentArena run: its agent drives a Windows 11 VM from a container, so nitrolane
   has to run inside that VM behind a planner shim (needs Docker/WSL2, the 6 GB evaluation ISO,

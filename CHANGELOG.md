@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 — 2026-10-15
+
+- Replay without a fixed settle wait: one UIA read per step, polling only while the next target is
+  missing; a stale-state rejection is retried once on a fresh read. Warm MCP replay: Notepad
+  1.2 → 1.0 s, Calculator (7 clicks) 3.3 → 2.5 s, form 2.7 → 2.1 s; CLI 2.9/4.8/4.4 → 2.7/4.0/3.9 s.
+- Background forms: the Tab key the runtime/replay sends after a typed value only moved focus
+  and was the one thing that brought a background form to the front; with the background tier it
+  is now skipped (ENTER and other keys still run). Form task: ~150 → 0 foreground samples per
+  replay, 343 → 0 for the model run. Fork hook now also sees PRESS_KEY.
+- cua-driver path lookup cached per process (~12 ms per action).
+- Measured with `tests/h2h/h2h_battery.py`; README table updated.
+
 
 - Head-to-head on the battery's three desktop tasks (`tests/h2h/h2h_battery.py`, replaces the
   single-task calculator script): nitrolane CLI and warm MCP server vs desktop-touch-mcp 2.3.1,

@@ -1,5 +1,5 @@
 diff --git a/src/arc_cua/backends/windows_uia.py b/src/arc_cua/backends/windows_uia.py
-index 400dcc9..bcce827 100644
+index 400dcc9..97f86de 100644
 --- a/src/arc_cua/backends/windows_uia.py
 +++ b/src/arc_cua/backends/windows_uia.py
 @@ -48,9 +48,124 @@ def hotkey_sequence(chord: str) -> str:
@@ -322,12 +322,13 @@ index 400dcc9..bcce827 100644
          if snapshot.revision != current.revision:
              return False
          if action.target_id:
-@@ -302,10 +533,21 @@ class WindowsUIABackend:
+@@ -302,10 +533,22 @@ class WindowsUIABackend:
          if kind == ActionKind.WAIT:
              time.sleep(0.05)
              return
 -        self.adapter.foreground(self.pid, self.window_id)
-+        if kind in {ActionKind.CLICK, ActionKind.SET_VALUE, ActionKind.TYPE_TEXT} and not action.click_modifier:
++        if kind in {ActionKind.CLICK, ActionKind.SET_VALUE, ActionKind.TYPE_TEXT, ActionKind.PRESS_KEY} \
++                and not action.click_modifier:
 +            # Optional host hook (nitrolane: cua-driver from its own process, which has no foreground
 +            # rights, so UWP/WinUI apps cannot activate themselves); True = done, foreground untouched.
 +            background = getattr(self.adapter, "background", None)

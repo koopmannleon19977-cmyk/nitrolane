@@ -2,25 +2,25 @@
  "nitrolane": {
   "notepad": [
    {
-    "total_s": 4.44,
+    "total_s": 4.61,
     "correct": true,
     "target_fg_samples": 0,
     "note": "model status=SUBTASK_COMPLETE cache=stored"
    },
    {
-    "total_s": 2.89,
+    "total_s": 2.66,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 2.88,
+    "total_s": 2.73,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 2.91,
+    "total_s": 2.65,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
@@ -28,25 +28,25 @@
   ],
   "calc": [
    {
-    "total_s": 9.36,
+    "total_s": 9.55,
     "correct": true,
     "target_fg_samples": 0,
     "note": "model status=SUBTASK_COMPLETE cache=stored"
    },
    {
-    "total_s": 4.75,
+    "total_s": 4.04,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 4.76,
+    "total_s": 3.98,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 4.79,
+    "total_s": 4.05,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
@@ -54,27 +54,27 @@
   ],
   "form": [
    {
-    "total_s": 6.89,
+    "total_s": 6.84,
     "correct": true,
-    "target_fg_samples": 345,
+    "target_fg_samples": 0,
     "note": "model status=SUBTASK_COMPLETE cache=stored"
    },
    {
-    "total_s": 4.43,
+    "total_s": 4.0,
     "correct": true,
-    "target_fg_samples": 153,
+    "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 4.51,
+    "total_s": 3.7,
     "correct": true,
-    "target_fg_samples": 152,
+    "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 4.41,
+    "total_s": 3.86,
     "correct": true,
-    "target_fg_samples": 151,
+    "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    }
   ]
@@ -143,28 +143,28 @@
   ]
  },
  "nitrolane-mcp": {
-  "_startup_s": 0.55,
+  "_startup_s": 0.56,
   "notepad": [
    {
-    "total_s": 3.83,
+    "total_s": 3.86,
     "correct": true,
     "target_fg_samples": 0,
     "note": "model status=SUBTASK_COMPLETE cache=stored"
    },
    {
-    "total_s": 1.22,
+    "total_s": 0.98,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 1.2,
+    "total_s": 1.01,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 1.21,
+    "total_s": 1.0,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
@@ -172,25 +172,25 @@
   ],
   "calc": [
    {
-    "total_s": 7.52,
+    "total_s": 7.3,
     "correct": true,
     "target_fg_samples": 0,
     "note": "model status=SUBTASK_COMPLETE cache=stored"
    },
    {
-    "total_s": 3.25,
+    "total_s": 2.44,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 3.29,
+    "total_s": 2.47,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 3.14,
+    "total_s": 2.51,
     "correct": true,
     "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
@@ -198,27 +198,27 @@
   ],
   "form": [
    {
-    "total_s": 5.03,
+    "total_s": 5.13,
     "correct": true,
-    "target_fg_samples": 343,
+    "target_fg_samples": 0,
     "note": "model status=SUBTASK_COMPLETE cache=stored"
    },
    {
-    "total_s": 2.7,
+    "total_s": 2.03,
     "correct": true,
-    "target_fg_samples": 152,
+    "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 2.72,
+    "total_s": 2.07,
     "correct": true,
-    "target_fg_samples": 152,
+    "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    },
    {
-    "total_s": 2.69,
+    "total_s": 2.09,
     "correct": true,
-    "target_fg_samples": 151,
+    "target_fg_samples": 0,
     "note": "replay status=SUBTASK_COMPLETE cache=hit"
    }
   ]

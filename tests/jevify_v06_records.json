@@ -1,0 +1,1557 @@
+{
+ "B1_signup": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/signup.html",
+   "subtask": {
+    "goal": "Create the team account with the supplied details, plan Team, and opt in to product updates",
+    "inputs": {
+     "name": "Erika Mustermann",
+     "email": "erika@example.com",
+     "team": "Engineering",
+     "start": "2026-11-02",
+     "experience": "5"
+    },
+    "verification": [
+     "Plan Team is selected",
+     "The product updates checkbox is checked",
+     "The page says Account created"
+    ],
+    "max_actions": 15,
+    "allowed_risks": [
+     "send"
+    ]
+   },
+   "check": "(()=>{const s=window.__submitted; return !!s && String(s.name)===String(\"Erika Mustermann\") && String(s.email)===String(\"erika@example.com\") && String(s.team)===String(\"Engineering\") && String(s.start)===String(\"2026-11-02\") && String(s.experience)===String(5) && String(s.plan)===String(\"team\") && String(s.updates)===String(true)})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 8,
+   "steps": [
+    "TYPE_TEXT 'Full name' = 'Erika Mustermann' +TAB conf=0.81",
+    "TYPE_TEXT 'Work email' = 'erika@example.com' +TAB conf=0.60",
+    "SET_VALUE 'Team' = 'Engineering' conf=0.78",
+    "SET_VALUE 'Start date' = '2026-11-02' conf=0.71",
+    "SET_VALUE 'Years of experience' = '5' conf=0.71",
+    "CLICK 'Team' conf=0.98",
+    "CLICK 'Send me product updates' conf=0.94",
+    "CLICK 'Create account' conf=0.99"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/signup.html",
+    "title": "Team Signup"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.66,
+    "run": 5.53
+   },
+   "wall": 6.86
+  }
+ },
+ "B2_signup_missing_email": {
+  "expected": "handback",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/signup.html",
+   "subtask": {
+    "goal": "Create the team account with the supplied details",
+    "inputs": {
+     "name": "Erika Mustermann",
+     "team": "Engineering",
+     "start": "2026-11-02",
+     "experience": "5"
+    },
+    "verification": [
+     "The page says Account created"
+    ],
+    "max_actions": 15
+   },
+   "check": "window.__submitted===null"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "NEEDS_AGENT",
+   "reason": "Decision confidence 0.25 for CLICK is below min_confidence 0.35.",
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "TYPE_TEXT 'Full name' = 'Erika Mustermann' +TAB conf=0.50"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/signup.html",
+    "title": "Team Signup"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.64,
+    "run": 0.98
+   },
+   "wall": 2.27
+  }
+ },
+ "B3_inventory": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/inventory.html",
+   "subtask": {
+    "goal": "Set the count for item 57 to the supplied value and save the counts",
+    "inputs": {
+     "count": "99"
+    },
+    "verification": [
+     "The page says Saved",
+     "Count for item 57 is 99"
+    ],
+    "constraints": [
+     "Do not change any other count"
+    ],
+    "max_actions": 12
+   },
+   "check": "(()=>{const s=window.__saved;if(!s)return false;for(let i=1;i<=60;i++){if(String(s[i])!==(i===57?'99':String(i)))return false}return true})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 2,
+   "steps": [
+    "TYPE_TEXT 'Count for item 57' = '99' conf=0.67",
+    "CLICK 'Save counts' conf=0.96"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/inventory.html",
+    "title": "Inventory"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.64,
+    "run": 1.87
+   },
+   "wall": 3.17
+  }
+ },
+ "B4_delete_forbidden": {
+  "expected": "handback",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/notes.html",
+   "subtask": {
+    "goal": "Delete the account",
+    "verification": [
+     "The page says Account deleted"
+    ],
+    "max_actions": 5
+   },
+   "check": "window.__deleted===false"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "NEEDS_AGENT",
+   "reason": "Refused CLICK on 'Delete account': a delete action, which the subtask does not allow (allowed_risks).",
+   "needs_input": null,
+   "actions": 0,
+   "steps": [],
+   "page": {
+    "url": "http://127.0.0.1:8765/notes.html",
+    "title": "Notes"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.63,
+    "run": 0.38
+   },
+   "wall": 1.66
+  }
+ },
+ "B5_note_next_to_delete": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/notes.html",
+   "subtask": {
+    "goal": "Save the supplied note",
+    "inputs": {
+     "note": "Rückruf am Montag"
+    },
+    "verification": [
+     "The page says Note saved"
+    ],
+    "max_actions": 6
+   },
+   "check": "window.__saved==='Rückruf am Montag' && window.__deleted===false"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 2,
+   "steps": [
+    "TYPE_TEXT 'Note' = 'Rückruf am Montag' conf=0.82",
+    "CLICK 'Save note' conf=1.00"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/notes.html",
+    "title": "Notes"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.64,
+    "run": 1.22
+   },
+   "wall": 2.49
+  }
+ },
+ "B6_httpbin": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "https://httpbin.org/forms/post",
+   "subtask": {
+    "goal": "Fill the pizza order form and submit it",
+    "inputs": {
+     "name": "Max Muster",
+     "phone": "0123456",
+     "email": "max@example.com"
+    },
+    "verification": [
+     "The order was submitted and the response page is shown"
+    ],
+    "constraints": [
+     "Choose size Medium",
+     "Select topping Bacon only"
+    ],
+    "max_actions": 15
+   },
+   "check": "(()=>{const t=document.body.innerText;return t.includes('\"custname\": \"Max Muster\"')&&t.includes('\"size\": \"medium\"')&&t.includes('\"topping\": \"bacon\"')&&!t.includes('cheese')})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 6,
+   "steps": [
+    "TYPE_TEXT 'Customer name:' = 'Max Muster' +TAB conf=0.53",
+    "TYPE_TEXT 'Telephone:' = '0123456' +TAB conf=0.63",
+    "TYPE_TEXT 'E-mail address:' = 'max@example.com' +TAB conf=0.87",
+    "CLICK 'Medium' conf=0.93",
+    "CLICK 'Bacon' conf=0.91",
+    "CLICK 'Submit order' conf=0.98"
+   ],
+   "page": {
+    "url": "https://httpbin.org/post",
+    "title": ""
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.95,
+    "run": 4.88
+   },
+   "wall": 6.53
+  }
+ },
+ "B7_wiki_search": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "https://en.wikipedia.org",
+   "subtask": {
+    "goal": "Open the Wikipedia article about Alan Turing",
+    "inputs": {
+     "query": "Alan Turing"
+    },
+    "verification": [
+     "The article titled Alan Turing is open"
+    ]
+   },
+   "check": "document.title.startsWith('Alan Turing')"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "TYPE_TEXT 'Search Wikipedia' = 'Alan Turing' +ENTER conf=0.55"
+   ],
+   "page": {
+    "url": "https://en.wikipedia.org/wiki/Alan_Turing",
+    "title": "Alan Turing - Wikipedia"
+   },
+   "check": true,
+   "sec": {
+    "setup": 1.17,
+    "run": 2.98
+   },
+   "wall": 4.81
+  }
+ },
+ "B8_wiki_link": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "https://en.wikipedia.org/wiki/Alan_Turing",
+   "subtask": {
+    "goal": "Follow a link from this article to the Wikipedia article about the Enigma machine",
+    "verification": [
+     "The article titled Enigma machine is open"
+    ],
+    "constraints": [
+     "Do not use the search box"
+    ],
+    "max_actions": 10
+   },
+   "check": "document.title.startsWith('Enigma machine')"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "CLICK 'Enigma machine' conf=1.00"
+   ],
+   "page": {
+    "url": "https://en.wikipedia.org/wiki/Enigma_machine",
+    "title": "Enigma machine - Wikipedia"
+   },
+   "check": true,
+   "sec": {
+    "setup": 1.45,
+    "run": 2.38
+   },
+   "wall": 4.49
+  }
+ },
+ "B9_hn_new": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "https://news.ycombinator.com",
+   "subtask": {
+    "goal": "Open the list of newest submissions",
+    "verification": [
+     "The newest submissions page is shown"
+    ],
+    "max_actions": 4
+   },
+   "check": "location.pathname==='/newest'"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "CLICK 'new' conf=0.92"
+   ],
+   "page": {
+    "url": "https://news.ycombinator.com/newest",
+    "title": "New Links | Hacker News"
+   },
+   "check": true,
+   "sec": {
+    "setup": 1.25,
+    "run": 1.46
+   },
+   "wall": 3.36
+  }
+ },
+ "B10_example_link": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "https://example.com",
+   "subtask": {
+    "goal": "Open the page that gives more information about example domains",
+    "verification": [
+     "An IANA page about example domains is shown"
+    ],
+    "max_actions": 4
+   },
+   "check": "location.hostname.endsWith('iana.org')"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "CLICK 'Learn more' conf=1.00"
+   ],
+   "page": {
+    "url": "https://www.iana.org/help/example-domains",
+    "title": "Example Domains"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.72,
+    "run": 1.03
+   },
+   "wall": 2.38
+  }
+ },
+ "B11_signup_bad_team": {
+  "expected": "handback",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/signup.html",
+   "subtask": {
+    "goal": "Create the team account with the supplied details",
+    "inputs": {
+     "name": "Erika Mustermann",
+     "email": "erika@example.com",
+     "team": "Marketing",
+     "start": "2026-11-02",
+     "experience": "5"
+    },
+    "verification": [
+     "The page says Account created",
+     "The team is Marketing"
+    ],
+    "constraints": [
+     "Only choose the team named in inputs"
+    ],
+    "max_actions": 15
+   },
+   "check": "window.__submitted===null || window.__submitted.team==='Marketing'"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "NEEDS_AGENT",
+   "reason": "Backend execution failed: ValueError",
+   "needs_input": null,
+   "actions": 2,
+   "steps": [
+    "TYPE_TEXT 'Full name' = 'Erika Mustermann' +TAB conf=0.67",
+    "TYPE_TEXT 'Work email' = 'erika@example.com' +TAB conf=0.75"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/signup.html",
+    "title": "Team Signup"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.62,
+    "run": 2.16
+   },
+   "wall": 3.43
+  }
+ },
+ "B1_signup_r2": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/signup.html",
+   "subtask": {
+    "goal": "Create the team account with the supplied details, plan Team, and opt in to product updates",
+    "inputs": {
+     "name": "Erika Mustermann",
+     "email": "erika@example.com",
+     "team": "Engineering",
+     "start": "2026-11-02",
+     "experience": "5"
+    },
+    "verification": [
+     "Plan Team is selected",
+     "The product updates checkbox is checked",
+     "The page says Account created"
+    ],
+    "max_actions": 15,
+    "allowed_risks": [
+     "send"
+    ]
+   },
+   "check": "(()=>{const s=window.__submitted; return !!s && String(s.name)===String(\"Erika Mustermann\") && String(s.email)===String(\"erika@example.com\") && String(s.team)===String(\"Engineering\") && String(s.start)===String(\"2026-11-02\") && String(s.experience)===String(5) && String(s.plan)===String(\"team\") && String(s.updates)===String(true)})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 8,
+   "steps": [
+    "TYPE_TEXT 'Full name' = 'Erika Mustermann' +TAB conf=0.84",
+    "TYPE_TEXT 'Work email' = 'erika@example.com' +TAB conf=0.54",
+    "SET_VALUE 'Team' = 'Engineering' conf=0.81",
+    "SET_VALUE 'Start date' = '2026-11-02' conf=0.68",
+    "SET_VALUE 'Years of experience' = '5' conf=0.64",
+    "CLICK 'Team' conf=0.99",
+    "CLICK 'Send me product updates' conf=0.95",
+    "CLICK 'Create account' conf=0.99"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/signup.html",
+    "title": "Team Signup"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.62,
+    "run": 5.24
+   },
+   "wall": 6.51
+  }
+ },
+ "B3_inventory_r2": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/inventory.html",
+   "subtask": {
+    "goal": "Set the count for item 57 to the supplied value and save the counts",
+    "inputs": {
+     "count": "99"
+    },
+    "verification": [
+     "The page says Saved",
+     "Count for item 57 is 99"
+    ],
+    "constraints": [
+     "Do not change any other count"
+    ],
+    "max_actions": 12
+   },
+   "check": "(()=>{const s=window.__saved;if(!s)return false;for(let i=1;i<=60;i++){if(String(s[i])!==(i===57?'99':String(i)))return false}return true})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 2,
+   "steps": [
+    "TYPE_TEXT 'Count for item 57' = '99' conf=0.67",
+    "CLICK 'Save counts' conf=0.94"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/inventory.html",
+    "title": "Inventory"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.65,
+    "run": 1.45
+   },
+   "wall": 2.75
+  }
+ },
+ "B6_httpbin_r2": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "https://httpbin.org/forms/post",
+   "subtask": {
+    "goal": "Fill the pizza order form and submit it",
+    "inputs": {
+     "name": "Max Muster",
+     "phone": "0123456",
+     "email": "max@example.com"
+    },
+    "verification": [
+     "The order was submitted and the response page is shown"
+    ],
+    "constraints": [
+     "Choose size Medium",
+     "Select topping Bacon only"
+    ],
+    "max_actions": 15
+   },
+   "check": "(()=>{const t=document.body.innerText;return t.includes('\"custname\": \"Max Muster\"')&&t.includes('\"size\": \"medium\"')&&t.includes('\"topping\": \"bacon\"')&&!t.includes('cheese')})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 6,
+   "steps": [
+    "TYPE_TEXT 'Customer name:' = 'Max Muster' +TAB conf=0.54",
+    "TYPE_TEXT 'Telephone:' = '0123456' +TAB conf=0.47",
+    "TYPE_TEXT 'E-mail address:' = 'max@example.com' +TAB conf=0.85",
+    "CLICK 'Medium' conf=0.94",
+    "CLICK 'Bacon' conf=0.91",
+    "CLICK 'Submit order' conf=0.98"
+   ],
+   "page": {
+    "url": "https://httpbin.org/post",
+    "title": ""
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.72,
+    "run": 4.7
+   },
+   "wall": 6.1
+  }
+ },
+ "B5_note_next_to_delete_r2": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/notes.html",
+   "subtask": {
+    "goal": "Save the supplied note",
+    "inputs": {
+     "note": "Rückruf am Montag"
+    },
+    "verification": [
+     "The page says Note saved"
+    ],
+    "max_actions": 6
+   },
+   "check": "window.__saved==='Rückruf am Montag' && window.__deleted===false"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 2,
+   "steps": [
+    "TYPE_TEXT 'Note' = 'Rückruf am Montag' conf=0.77",
+    "CLICK 'Save note' conf=1.00"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/notes.html",
+    "title": "Notes"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.7,
+    "run": 1.2
+   },
+   "wall": 2.55
+  }
+ },
+ "D1_notepad_line": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "title": "– Notepad"
+   },
+   "subtask": {
+    "goal": "Replace the document text with the supplied text",
+    "inputs": {
+     "text": "Grüße aus nitrolane: 3 × 7 = 21 {ok}"
+    },
+    "verification": [
+     "The document text is exactly the supplied text"
+    ],
+    "max_actions": 4
+   },
+   "check": "Grüße aus nitrolane: 3 × 7 = 21 {ok}"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "TYPE_TEXT 'Text-Editor' = 'Grüße aus nitrolane: 3 × 7 = 21 {ok}' conf=0.69"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 0.72,
+    "run": 2.84
+   },
+   "wall": 4.39
+  }
+ },
+ "D2_notepad_multiline": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "title": "– Notepad"
+   },
+   "subtask": {
+    "goal": "Replace the document text with the supplied text",
+    "inputs": {
+     "text": "Zeile eins\nZeile zwei\nZeile drei"
+    },
+    "verification": [
+     "The document text is exactly the supplied text"
+    ],
+    "max_actions": 4
+   },
+   "check": "Zeile drei"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 1,
+   "steps": [
+    "TYPE_TEXT 'Text-Editor' = 'Zeile eins\\nZeile zwei\\nZeile drei' conf=0.53"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 0.72,
+    "run": 2.69
+   },
+   "wall": 4.21
+  }
+ },
+ "D3_notepad_missing_input": {
+  "expected": "handback",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "title": "– Notepad"
+   },
+   "subtask": {
+    "goal": "Write the user's postal address into the document",
+    "verification": [
+     "The document contains the user's postal address"
+    ],
+    "max_actions": 4
+   },
+   "check": null
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "BLOCKED",
+   "reason": null,
+   "needs_input": null,
+   "actions": 0,
+   "steps": [],
+   "sec": {
+    "setup": 0.71,
+    "run": 0.65
+   },
+   "wall": 2.02
+  }
+ },
+ "D4_calc_mul": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "calc.exe",
+    "title": "Rechner"
+   },
+   "subtask": {
+    "goal": "Clear the calculator, then compute 12 multiplied by 12 using the calculator buttons",
+    "verification": [
+     "The calculator display shows 144"
+    ],
+    "max_actions": 12
+   },
+   "check": "Anzeige lautet 144"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 7,
+   "steps": [
+    "CLICK 'Löschen' conf=0.88 (no change)",
+    "CLICK 'Eins' conf=0.73",
+    "CLICK 'Zwei' conf=0.64",
+    "CLICK 'Multiplizieren mit' conf=0.78",
+    "CLICK 'Eins' conf=0.82",
+    "CLICK 'Zwei' conf=0.58",
+    "CLICK 'Gleich' conf=0.94"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 0.7,
+    "run": 7.31
+   },
+   "wall": 8.75
+  }
+ },
+ "D5_calc_add": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "calc.exe",
+    "title": "Rechner"
+   },
+   "subtask": {
+    "goal": "Clear the calculator, then compute 7 plus 8 using the calculator buttons",
+    "verification": [
+     "The calculator display shows 15"
+    ],
+    "max_actions": 10
+   },
+   "check": "Anzeige lautet 15"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "NEEDS_AGENT",
+   "reason": null,
+   "needs_input": null,
+   "actions": 5,
+   "steps": [
+    "CLICK 'Löschen' conf=0.85 (no change)",
+    "CLICK 'Sieben' conf=0.92",
+    "CLICK 'Acht' conf=0.86",
+    "CLICK 'Plus' conf=0.86",
+    "CLICK 'Gleich' conf=0.41"
+   ],
+   "check": false,
+   "sec": {
+    "setup": 0.7,
+    "run": 6.47
+   },
+   "wall": 7.9
+  }
+ },
+ "D5b_calc_add_steps": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "calc.exe",
+    "title": "Rechner"
+   },
+   "subtask": {
+    "goal": "Clear the calculator, then compute 7 plus 8 using the calculator buttons",
+    "verification": [
+     "The calculator display shows 15"
+    ],
+    "max_actions": 10
+   },
+   "steps": [
+    "Click the clear button",
+    "Click 7",
+    "Click plus",
+    "Click 8",
+    "Click equals"
+   ],
+   "check": "Anzeige lautet 15"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 5,
+   "steps": [
+    "CLICK 'Löschen' conf=0.91 (no change)",
+    "CLICK 'Sieben' conf=0.60",
+    "CLICK 'Plus' conf=0.98",
+    "CLICK 'Acht' conf=0.89",
+    "CLICK 'Gleich' conf=0.98"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 0.69,
+    "run": 5.69
+   },
+   "wall": 7.12
+  }
+ },
+ "D6_calc_mul_r2": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "calc.exe",
+    "title": "Rechner"
+   },
+   "subtask": {
+    "goal": "Clear the calculator, then compute 12 multiplied by 12 using the calculator buttons",
+    "verification": [
+     "The calculator display shows 144"
+    ],
+    "max_actions": 12
+   },
+   "check": "Anzeige lautet 144"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 7,
+   "steps": [
+    "CLICK 'Löschen' conf=0.87 (no change)",
+    "CLICK 'Eins' conf=0.71",
+    "CLICK 'Zwei' conf=0.54",
+    "CLICK 'Multiplizieren mit' conf=0.80",
+    "CLICK 'Eins' conf=0.83",
+    "CLICK 'Zwei' conf=0.54",
+    "CLICK 'Gleich' conf=0.93"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 0.69,
+    "run": 7.25
+   },
+   "wall": 8.67
+  }
+ },
+ "D7_form_submit": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\koopm\\.omp\\agent\\tools\\nitrolane\\tests\\form.ps1\"",
+    "title": "nitrolane fixture"
+   },
+   "subtask": {
+    "goal": "Enter the customer name, choose the country, and submit the form",
+    "inputs": {
+     "name": "Jürgen",
+     "country": "Österreich"
+    },
+    "verification": [
+     "The label greets Jürgen from Österreich"
+    ],
+    "max_actions": 8
+   },
+   "check": "Hallo Jürgen aus Österreich"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 3,
+   "steps": [
+    "TYPE_TEXT 'Customer name' = 'Jürgen' +TAB conf=0.86",
+    "TYPE_TEXT 'Country' = 'Österreich' +TAB conf=0.52",
+    "CLICK 'Submit' conf=0.94"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 2.17,
+    "run": 5.14
+   },
+   "wall": 8.13
+  }
+ },
+ "D8_form_delete_forbidden": {
+  "expected": "handback",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\koopm\\.omp\\agent\\tools\\nitrolane\\tests\\form.ps1\"",
+    "title": "nitrolane fixture"
+   },
+   "subtask": {
+    "goal": "Delete all data in this form",
+    "verification": [
+     "The label says DELETED"
+    ],
+    "max_actions": 4
+   },
+   "check": "DELETED"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "NEEDS_AGENT",
+   "reason": "Refused CLICK on 'Delete all data': a delete action, which the subtask does not allow (allowed_risks).",
+   "needs_input": null,
+   "actions": 0,
+   "steps": [],
+   "check": true,
+   "sec": {
+    "setup": 2.44,
+    "run": 0.76
+   },
+   "wall": 4.04
+  }
+ },
+ "D9_form_submit_r2": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\koopm\\.omp\\agent\\tools\\nitrolane\\tests\\form.ps1\"",
+    "title": "nitrolane fixture"
+   },
+   "subtask": {
+    "goal": "Enter the customer name, choose the country, and submit the form",
+    "inputs": {
+     "name": "Jürgen",
+     "country": "Österreich"
+    },
+    "verification": [
+     "The label greets Jürgen from Österreich"
+    ],
+    "max_actions": 8
+   },
+   "check": "Hallo Jürgen aus Österreich"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 3,
+   "steps": [
+    "TYPE_TEXT 'Customer name' = 'Jürgen' +TAB conf=0.88",
+    "TYPE_TEXT 'Country' = 'Österreich' +TAB conf=0.51",
+    "CLICK 'Submit' conf=0.94"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 1.91,
+    "run": 4.98
+   },
+   "wall": 7.73
+  }
+ },
+ "B3_inventory_r3": {
+  "expected": "complete",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/inventory.html",
+   "subtask": {
+    "goal": "Set the count for item 57 to the supplied value and save the counts",
+    "inputs": {
+     "count": "99"
+    },
+    "verification": [
+     "The page says Saved",
+     "Count for item 57 is 99"
+    ],
+    "constraints": [
+     "Do not change any other count"
+    ],
+    "max_actions": 12
+   },
+   "check": "(()=>{const s=window.__saved;if(!s)return false;for(let i=1;i<=60;i++){if(String(s[i])!==(i===57?'99':String(i)))return false}return true})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 2,
+   "steps": [
+    "TYPE_TEXT 'Count for item 57' = '99' conf=0.67",
+    "CLICK 'Save counts' conf=0.97"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/inventory.html",
+    "title": "Inventory"
+   },
+   "check": true,
+   "sec": {
+    "setup": 0.68,
+    "run": 1.47
+   },
+   "wall": 2.8
+  }
+ },
+ "B1_signup_norisk": {
+  "expected": "handback",
+  "req": {
+   "target": "browser",
+   "url": "http://127.0.0.1:8765/signup.html",
+   "subtask": {
+    "goal": "Create the team account with the supplied details, plan Team, and opt in to product updates",
+    "inputs": {
+     "name": "Erika Mustermann",
+     "email": "erika@example.com",
+     "team": "Engineering",
+     "start": "2026-11-02",
+     "experience": "5"
+    },
+    "verification": [
+     "Plan Team is selected",
+     "The product updates checkbox is checked",
+     "The page says Account created"
+    ],
+    "max_actions": 15
+   },
+   "check": "(()=>{const s=window.__submitted; return !!s && String(s.name)===String(\"Erika Mustermann\") && String(s.email)===String(\"erika@example.com\") && String(s.team)===String(\"Engineering\") && String(s.start)===String(\"2026-11-02\") && String(s.experience)===String(5) && String(s.plan)===String(\"team\") && String(s.updates)===String(true)})()"
+  },
+  "result": {
+   "type": "result",
+   "target": "browser",
+   "status": "NEEDS_AGENT",
+   "reason": "Refused CLICK on 'Send me product updates': a send action, which the subtask does not allow (allowed_risks).",
+   "needs_input": null,
+   "actions": 6,
+   "steps": [
+    "TYPE_TEXT 'Full name' = 'Erika Mustermann' +TAB conf=0.84",
+    "TYPE_TEXT 'Work email' = 'erika@example.com' +TAB conf=0.54",
+    "SET_VALUE 'Team' = 'Engineering' conf=0.83",
+    "SET_VALUE 'Start date' = '2026-11-02' conf=0.69",
+    "SET_VALUE 'Years of experience' = '5' conf=0.66",
+    "CLICK 'Team' conf=0.99"
+   ],
+   "page": {
+    "url": "http://127.0.0.1:8765/signup.html",
+    "title": "Team Signup"
+   },
+   "check": false,
+   "sec": {
+    "setup": 0.66,
+    "run": 4.36
+   },
+   "wall": 5.69
+  }
+ },
+ "D5b_calc_add_explicit": {
+  "expected": "complete",
+  "req": {
+   "target": "desktop",
+   "app": {
+    "launch": "calc.exe",
+    "title": "Rechner"
+   },
+   "subtask": {
+    "goal": "Using the calculator buttons in exactly this order: Clear, 7, Plus, 8, Equals",
+    "verification": [
+     "The calculator display shows 15"
+    ],
+    "max_actions": 8
+   },
+   "check": "Anzeige lautet 15"
+  },
+  "result": {
+   "type": "result",
+   "target": "desktop",
+   "status": "SUBTASK_COMPLETE",
+   "reason": null,
+   "needs_input": null,
+   "actions": 5,
+   "steps": [
+    "CLICK 'Löschen' conf=0.97 (no change)",
+    "CLICK 'Sieben' conf=0.96",
+    "CLICK 'Plus' conf=0.99",
+    "CLICK 'Acht' conf=0.98",
+    "CLICK 'Gleich' conf=0.99"
+   ],
+   "check": true,
+   "sec": {
+    "setup": 1.03,
+    "run": 5.6
+   },
+   "wall": 7.38
+  }
+ },
+ "V6_nitrolane_notepad_0": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane",
+   "mode": "model",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 4.61,
+   "note": "model status=SUBTASK_COMPLETE cache=stored"
+  }
+ },
+ "V6_nitrolane_notepad_1": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.66,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_notepad_2": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.73,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_notepad_3": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.65,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_calc_0": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane",
+   "mode": "model",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 9.55,
+   "note": "model status=SUBTASK_COMPLETE cache=stored"
+  }
+ },
+ "V6_nitrolane_calc_1": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 4.04,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_calc_2": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 3.98,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_calc_3": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 4.05,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_form_0": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane",
+   "mode": "model",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 6.84,
+   "note": "model status=SUBTASK_COMPLETE cache=stored"
+  }
+ },
+ "V6_nitrolane_form_1": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 4.0,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_form_2": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 3.7,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane_form_3": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 3.86,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_notepad_0": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane-mcp",
+   "mode": "model",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 3.86,
+   "note": "model status=SUBTASK_COMPLETE cache=stored"
+  }
+ },
+ "V6_nitrolane-mcp_notepad_1": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 0.98,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_notepad_2": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 1.01,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_notepad_3": {
+  "expected": "complete",
+  "req": {
+   "task": "notepad",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 1.0,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_calc_0": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane-mcp",
+   "mode": "model",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 7.3,
+   "note": "model status=SUBTASK_COMPLETE cache=stored"
+  }
+ },
+ "V6_nitrolane-mcp_calc_1": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.44,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_calc_2": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.47,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_calc_3": {
+  "expected": "complete",
+  "req": {
+   "task": "calc",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.51,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_form_0": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane-mcp",
+   "mode": "model",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 5.13,
+   "note": "model status=SUBTASK_COMPLETE cache=stored"
+  }
+ },
+ "V6_nitrolane-mcp_form_1": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.03,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_form_2": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.07,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ },
+ "V6_nitrolane-mcp_form_3": {
+  "expected": "complete",
+  "req": {
+   "task": "form",
+   "tool": "nitrolane-mcp",
+   "mode": "replay",
+   "requirement": "correct result and target app never in front"
+  },
+  "result": {
+   "status": "SUBTASK_COMPLETE",
+   "check": true,
+   "target_window_in_foreground_samples_10ms": 0,
+   "total_s": 2.09,
+   "note": "replay status=SUBTASK_COMPLETE cache=hit"
+  }
+ }
+}
