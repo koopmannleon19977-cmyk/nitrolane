@@ -1,6 +1,9 @@
-# Local patches (nitrolane), on top of GreenKeewi/arc-cua-windows 659696d
+# Backend engineering in nitrolane
 
-`git diff` is authoritative. Each patch came from a failing nitrolane battery run (`tests/` in this repo).
+nitrolane drives its backends harder than their stock configuration: everything below is
+original nitrolane engineering, shipped as one patch against arc-cua-windows `659696d`
+(`arc-cua-windows-local.patch`, applied by `setup.ps1`). Every change exists because a
+measured battery run failed without it — the "why" column is the measurement.
 
 | File | Change | Why (measured on Windows 11, German UI) |
 |---|---|---|

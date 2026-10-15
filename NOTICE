@@ -1,0 +1,17 @@
+nitrolane
+Copyright (c) 2026 Leon Koopmann — MIT License (see LICENSE).
+
+nitrolane downloads these execution backends at install time (not vendored):
+
+  arc-cua — https://github.com/shhivv/arc-cua
+  MIT License, Copyright (c) Shiv Shanmugam
+
+  arc-cua-windows — https://github.com/GreenKeewi/arc-cua-windows
+  MIT License (see the upstream LICENSE file)
+  Pinned commit: 659696da0134ae4946a40da76fc0ca6d56f292b7
+
+The files in patches/ are modifications of arc-cua-windows and are distributed
+under the same MIT terms. They are documented in patches/README.md.
+
+JEV decisions come from the hosted TypeSafe service; bring your own API key.
+This repository contains no keys or credentials.

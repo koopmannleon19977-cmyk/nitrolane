@@ -3,11 +3,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Windows 11](https://img.shields.io/badge/platform-Windows%2011-informational)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+[![Release](https://img.shields.io/github/v/release/koopmannleon19977-cmyk/nitrolane)](https://github.com/koopmannleon19977-cmyk/nitrolane/releases)
 
 **The fast lane for browser and desktop automation.** One JSON request in, one
-*verified* JSON result out. A small decision model (TypeSafe JEV) picks each click
-from the elements the UI actually offers — no frontier LLM in the per-click loop,
-no screenshots, no invented text. Repeat runs replay with **zero model calls**.
+*verified* JSON result out. Instead of paying a frontier LLM for every click,
+nitrolane lets a decision model (TypeSafe JEV) choose each action from the elements
+the UI actually offers — ~0.3 s per decision, no screenshots, no invented text.
+Anything it has done once and verified, it replays later with **zero model calls**.
 
 ```text
 planner (you / any LLM)                nitrolane                     UI
@@ -16,11 +18,6 @@ goal + inputs + check  ─────────────►  JEV decisions
                        ◄─────────────  ~0.3 s each   ◄─────────────  DOM / UIA tree
         verified JSON                    + replay cache
 ```
-
-Built on [arc-cua](https://github.com/shhivv/arc-cua) (MIT, Shiv Shanmugam) and its
-Windows fork [arc-cua-windows](https://github.com/GreenKeewi/arc-cua-windows) (MIT),
-plus measured local patches — developed for the [Oh My Pi](https://omp.sh) agent on
-Windows 11. Attribution: `THIRD_PARTY_NOTICES.md`; patches: `patches/LOCAL_PATCHES.md`.
 
 ## Measured, not promised
 
@@ -41,9 +38,8 @@ UI state, Windows 11, 2026-10-15):
 | Notepad: set document text | 4.0 s | **0.46 s** |
 | Calculator: 7 button clicks | 6.4 s | **3.8 s** |
 
-Browser median over the battery: 1.4 s per subtask; desktop median 5.0 s.
-Why so fast? LLM-in-the-loop agents pay a full model round-trip per click;
-nitrolane pays ~0.3 s for a finite-choice decision — and nothing on replays.
+Browser median over the battery: 1.4 s per subtask · desktop median: 5.0 s.
+Reproduce them yourself: `tests/battery.py` (see [Tests](#tests)).
 
 ## Demo
 
@@ -73,6 +69,32 @@ EOF
 }
 ```
 
+Desktop works the same way: `"target":"desktop","app":{"title":"Rechner","launch":"calc.exe"}`.
+
+## What nitrolane adds
+
+Everything in this repo is nitrolane's own engineering on top of two MIT backends
+(credits below) — the backends are downloaded at install time, never vendored:
+
+- **The lane itself** (`nitrolane.py`): request/result contract, warm-Chrome
+  management (own profile, never the user's), UWP window resolution, minimized-window
+  restore, independent `check`/`extract` verification in the same call.
+- **Record-and-replay cache**: verified trajectories are stored and re-executed by
+  element name + geometry with semantic guards and probe-based settling — repeat
+  work costs zero model calls; a failed post-replay check deletes the entry.
+- **A faster Windows backend** (`patches/`): UIA observation as a single CacheRequest
+  subtree fetch (350 ms → 55 ms), exact layout-independent typing
+  (ValuePattern first, Unicode `SendInput` fallback), native drop-down selection,
+  one observe saved per action.
+- **A safer decision loop**: risky controls are refused *by name* instead of hidden
+  (hiding made the model substitute-click the wrong button), separate confidence
+  gates for actions (0.45) and completions (0.30) — thresholds derived from battery
+  data, where correct actions scored ≥ 0.5 and wrong targets ≤ 0.43.
+- **The verification methodology**: a 27-task battery where success is only counted
+  when an independent check against the real UI agrees (`tests/`).
+
+Details and per-change measurements: [`patches/README.md`](patches/README.md).
+
 ## Install (Windows 11)
 
 Prerequisites: Python 3.12+, Chrome, git, and a
@@ -81,29 +103,26 @@ Prerequisites: Python 3.12+, Chrome, git, and a
 ```powershell
 git clone https://github.com/koopmannleon19977-cmyk/nitrolane.git
 cd nitrolane
-.\setup.ps1   # pinned upstream + patches + venv, then smoke test and full upstream test suite
+.\setup.ps1   # pinned backend + nitrolane patches + venv, then smoke test and backend test suite
 ```
 
-## How it works
+## The contract
 
 - **Bounded subtasks.** You supply `goal`, literal `inputs`, `verification` criteria
-  and `constraints`. JEV only chooses among offered elements/operations; it can never
-  invent text. Missing value → `NEEDS_INPUT` naming the field.
+  and `constraints`. The model only chooses among offered elements/operations; it can
+  never invent text. Missing value → `NEEDS_INPUT` naming the field.
 - **Independent check.** `check` (JS expression in the browser, expected text on the
   desktop) verifies the real UI state after the run — success is never taken on faith.
-- **Safety gates.** Risky controls (delete/send/purchase/close) are refused by name
-  unless opted in via `allowed_risks`. Low-confidence decisions hand back
-  (`NEEDS_AGENT`) instead of guessing. Secrets can be redacted via `secret_inputs`.
-- **Browser:** one warm headless Chrome with its own profile (never yours), CDP,
-  1280×2400 viewport so most content needs no scrolling decisions.
-- **Desktop:** foreground Windows UIA. One CacheRequest per observation (~55 ms),
-  exact typing via ValuePattern/Unicode input (keyboard-layout independent),
-  native drop-down selection.
-- **Cache:** `"cache": true` (requires `check`) records verified trajectories and
-  replays them model-free; a failed post-replay check deletes the entry.
+- **Safety gates.** Delete/send/purchase/close controls are refused by name unless
+  opted in via `allowed_risks`. Low-confidence decisions hand back (`NEEDS_AGENT`)
+  instead of guessing. Secrets stay hidden from the model via `secret_inputs`.
+- **Browser:** one warm headless Chrome, CDP, 1280×2400 viewport so most content
+  needs no scrolling decisions. **Desktop:** foreground Windows UIA.
 
 Full contract and hard-won authoring rules (from the battery):
-`omp/skills/nitrolane/SKILL.md`.
+[`omp/skills/nitrolane/SKILL.md`](omp/skills/nitrolane/SKILL.md). The `omp/` folder
+also ships ready-made [Oh My Pi](https://omp.sh) agents and a delegation rule that
+route bounded subtasks to nitrolane first.
 
 ## Limitations
 
@@ -124,8 +143,11 @@ vendor\arc-cua-windows\.venv\Scripts\python.exe tests\battery.py
 - Background desktop input pairing (cua-driver)
 - OCR fallback for canvas/custom-drawn UIs
 - Trajectory cache sharing across machines
+- Public benchmark runs (OSWorld/WebArena-style scoring)
 
-## License
+## Credits & License
 
-MIT for the nitrolane wrapper, tests and integration files. Upstream licenses and
-attribution: `THIRD_PARTY_NOTICES.md`.
+nitrolane is MIT-licensed (see [`LICENSE`](LICENSE)). It executes through
+[arc-cua](https://github.com/shhivv/arc-cua) by Shiv Shanmugam (MIT) and its Windows
+fork [arc-cua-windows](https://github.com/GreenKeewi/arc-cua-windows) (MIT), downloaded
+pinned at install time. Full attribution: [`NOTICE`](NOTICE).

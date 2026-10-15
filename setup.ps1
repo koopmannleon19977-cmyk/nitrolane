@@ -11,7 +11,7 @@ if (-not (Test-Path $Vendor)) {
     Move-Item (Join-Path $Root "vendor\arc-cua-windows-$Commit") $Vendor
     git -C $Vendor init -q
     git -C $Vendor apply (Join-Path $Root "patches\arc-cua-windows-local.patch")
-    Copy-Item (Join-Path $Root "patches\LOCAL_PATCHES.md") (Join-Path $Vendor "LOCAL_PATCHES.md")
+    Copy-Item (Join-Path $Root "patches\README.md") (Join-Path $Vendor "NITROLANE_PATCHES.md")
 }
 $Py = Join-Path $Vendor ".venv\Scripts\python.exe"
 if (-not (Test-Path $Py)) {

@@ -54,4 +54,4 @@ EOF
 
 ## Wartung
 
-Battery: Fixture-Server `python -m http.server 8765 --bind 127.0.0.1` in `tests/pages`, dann `"$ARC" tests/battery.py` → `last_run.json`, mit der Rubrik in `battery.json` per jevify bewerten. Lokale Patches am Fork: `vendor/arc-cua-windows/LOCAL_PATCHES.md`.
+Battery: Fixture-Server `python -m http.server 8765 --bind 127.0.0.1` in `tests/pages`, dann `"$ARC" tests/battery.py` → `last_run.json`, mit der Rubrik in `battery.json` per jevify bewerten. Backend-Patches: `patches/README.md` (im Vendor-Clone als `NITROLANE_PATCHES.md`).
