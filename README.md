@@ -45,21 +45,35 @@ correct. Records: `tests/jevify_v05_records.json`.
 Browser median over the battery: 1.4 s per subtask · desktop median: 5.0 s.
 Reproduce them yourself: `tests/battery.py` (see [Tests](#tests)).
 
-### Head-to-head on the same machine (2026-10-15)
+### Head-to-head on the battery's desktop tasks (2026-10-15)
 
-Same task — Windows 11 Calculator, clear then 12 × 12 =, user's own window in front,
-foreground sampled every 10 ms. Scripts and raw results: [`tests/h2h/`](tests/h2h/).
+Same three tasks as the battery (D1 Notepad text, D4 Calculator 12 × 12, D7 WinForms
+form), same whole-word check on the real UI afterwards, user's own window in front, the
+foreground sampled every 10 ms ("in front" = samples with the target app in front). Median
+time · correct runs · in-front samples. Scripts and raw data: [`tests/h2h/`](tests/h2h/).
 
-| | Time | Correct | Calculator in front |
-|---|---:|---:|---:|
-| nitrolane cached replay (CLI call, 0 model calls) | **4.8–4.9 s** | 3/3 | **0 samples** |
-| nitrolane with the decision model (7 decisions) | 9.2 s | 1/1 | 0 samples |
-| [terminator-mcp-agent](https://github.com/mediar-ai/terminator) by element id, no model | 46.5–47.5 s (6.6 s per click) | 1/2 (second run: 24) | 3,387–4,485 samples |
+| Tool | Notepad | Calculator | Form |
+|---|---|---|---|
+| nitrolane, CLI per call — model run | 4.4 s · 1/1 · 0 | 9.4 s · 1/1 · 0 | 6.9 s · 1/1 · 345 |
+| nitrolane, CLI per call — replay | 2.9 s · 3/3 · 0 | 4.8 s · 3/3 · 0 | 4.4 s · 3/3 · 151–153 |
+| nitrolane MCP server (warm) — model run | 3.8 s · 1/1 · 0 | 7.5 s · 1/1 · 0 | 5.0 s · 1/1 · 343 |
+| nitrolane MCP server (warm) — replay | 1.2 s · 3/3 · 0 | 3.3 s · 3/3 · 0 | 2.7 s · 3/3 · 151–152 |
+| [desktop-touch-mcp](https://github.com/Harusame64/desktop-touch-mcp) 2.3.1, ids given, no model | **0.49 s** · 3/3 · 0–49 | **1.1 s** · 3/3 · 0 | **0.85 s** · 3/3 · 0 |
+| [terminator-mcp-agent](https://github.com/mediar-ai/terminator), ids given, no model | 1.2 s · 3/3 · 36–42 | 45 s · 3/3 · ~4,340 | 1.8 s · **0/3** · 97–124 |
+| [Windows-MCP](https://github.com/CursorTouch/Windows-MCP), coordinates given, no model | 5.4 s · 2/3 · 0–469 | 5.1 s · 3/3 · ~433 | 13.7 s · 3/3 · ~1,255 |
 
-[Windows-MCP](https://github.com/CursorTouch/Windows-MCP) could not be measured while the
-machine was in use: it yields to user activity (`CONTROL_PREEMPTED`, ~10 s idle wait) and
-then did not answer within 60 s. One machine, one app, a handful of runs — a smoke
-comparison, not a benchmark.
+What this says, without spin:
+- **desktop-touch-mcp executes fastest** when an agent already knows the element ids: 2.5–3×
+  faster than nitrolane's warm replay, and it kept the apps behind the user's window. The
+  competitors' rows contain no decisions at all — in real use an LLM agent must find those
+  ids first; nitrolane's model rows include every decision and the independent check.
+- nitrolane never brought Notepad or Calculator to the front; the form task does (the replay
+  sends a Tab key and selects the drop-down from its own process — both foreground paths).
+- terminator failed the form in 3/3 runs (`Option 'Österreich' not found in dropdown`) and
+  needs 6.4 s per Calculator click (it searches `ApplicationFrameHost`); Windows-MCP drives
+  the real mouse and hands control back on any user input (`CONTROL_UNAVAILABLE` in one run).
+- One machine, German UI, three tasks, three runs each: a reproducible comparison, not a
+  benchmark. A public benchmark run (WindowsAgentArena) is not done yet — see the roadmap.
 
 Decision-model A/B on the battery: `jev-1.14.0` 26/28 vs `jev-1.13.0` (default) 27/28 —
 1.14 solved "7 plus 8" in natural order but handed back both 12 × 12 tasks at low
@@ -256,9 +270,13 @@ auth for it) — same trust boundary as your user account.
 
 ## Roadmap
 
+- Replay without a settle wait per step (head-to-head: desktop-touch-mcp executes 2.5–3× faster)
+- Form tasks fully in the background: no Tab key and no in-process drop-down selection
 - Background keys through a verified input channel
+- Public WindowsAgentArena run: its agent drives a Windows 11 VM from a container, so nitrolane
+  has to run inside that VM behind a planner shim (needs Docker/WSL2, the 6 GB evaluation ISO,
+  a 30 GB golden image)
 - Trajectory cache sharing across machines
-- Public benchmark runs (OSWorld/WebArena-style scoring)
 
 ## Credits & License
 

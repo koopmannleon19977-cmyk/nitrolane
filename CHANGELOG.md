@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Head-to-head on the battery's three desktop tasks (`tests/h2h/h2h_battery.py`, replaces the
+  single-task calculator script): nitrolane CLI and warm MCP server vs desktop-touch-mcp 2.3.1,
+  terminator-mcp-agent and Windows-MCP, same checks, 10 ms foreground sampling. desktop-touch-mcp,
+  given element ids and no model, executes 2.5–3× faster than nitrolane's warm replay; terminator
+  failed the form 3/3; Windows-MCP took 5–14 s and brought every app to the front; nitrolane's
+  form replay still brings the form forward (Tab key, drop-down). Results in the README.
+
 ## v0.5.1 — 2026-10-15
 
 - `app.launch` is skipped when a window with the title is already open: re-launching a

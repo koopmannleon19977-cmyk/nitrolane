@@ -1,0 +1,352 @@
+{
+ "nitrolane": {
+  "notepad": [
+   {
+    "total_s": 4.44,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "model status=SUBTASK_COMPLETE cache=stored"
+   },
+   {
+    "total_s": 2.89,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 2.88,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 2.91,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   }
+  ],
+  "calc": [
+   {
+    "total_s": 9.36,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "model status=SUBTASK_COMPLETE cache=stored"
+   },
+   {
+    "total_s": 4.75,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 4.76,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 4.79,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   }
+  ],
+  "form": [
+   {
+    "total_s": 6.89,
+    "correct": true,
+    "target_fg_samples": 345,
+    "note": "model status=SUBTASK_COMPLETE cache=stored"
+   },
+   {
+    "total_s": 4.43,
+    "correct": true,
+    "target_fg_samples": 153,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 4.51,
+    "correct": true,
+    "target_fg_samples": 152,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 4.41,
+    "correct": true,
+    "target_fg_samples": 151,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   }
+  ]
+ },
+ "desktop-touch": {
+  "_startup_s": 4.48,
+  "notepad": [
+   {
+    "total_s": 0.89,
+    "correct": true,
+    "target_fg_samples": 49,
+    "note": null
+   },
+   {
+    "total_s": 0.49,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   },
+   {
+    "total_s": 0.48,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   }
+  ],
+  "calc": [
+   {
+    "total_s": 1.16,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   },
+   {
+    "total_s": 1.12,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   },
+   {
+    "total_s": 1.14,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   }
+  ],
+  "form": [
+   {
+    "total_s": 0.98,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   },
+   {
+    "total_s": 0.83,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   },
+   {
+    "total_s": 0.85,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": null
+   }
+  ]
+ },
+ "nitrolane-mcp": {
+  "_startup_s": 0.55,
+  "notepad": [
+   {
+    "total_s": 3.83,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "model status=SUBTASK_COMPLETE cache=stored"
+   },
+   {
+    "total_s": 1.22,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 1.2,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 1.21,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   }
+  ],
+  "calc": [
+   {
+    "total_s": 7.52,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "model status=SUBTASK_COMPLETE cache=stored"
+   },
+   {
+    "total_s": 3.25,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 3.29,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 3.14,
+    "correct": true,
+    "target_fg_samples": 0,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   }
+  ],
+  "form": [
+   {
+    "total_s": 5.03,
+    "correct": true,
+    "target_fg_samples": 343,
+    "note": "model status=SUBTASK_COMPLETE cache=stored"
+   },
+   {
+    "total_s": 2.7,
+    "correct": true,
+    "target_fg_samples": 152,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 2.72,
+    "correct": true,
+    "target_fg_samples": 152,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   },
+   {
+    "total_s": 2.69,
+    "correct": true,
+    "target_fg_samples": 151,
+    "note": "replay status=SUBTASK_COMPLETE cache=hit"
+   }
+  ]
+ },
+ "terminator": {
+  "_startup_s": 2.67,
+  "notepad": [
+   {
+    "total_s": 1.18,
+    "correct": true,
+    "target_fg_samples": 36,
+    "note": null
+   },
+   {
+    "total_s": 1.25,
+    "correct": true,
+    "target_fg_samples": 42,
+    "note": null
+   },
+   {
+    "total_s": 1.21,
+    "correct": true,
+    "target_fg_samples": 40,
+    "note": null
+   }
+  ],
+  "calc": [
+   {
+    "total_s": 45.09,
+    "correct": true,
+    "target_fg_samples": 4351,
+    "note": null
+   },
+   {
+    "total_s": 44.99,
+    "correct": true,
+    "target_fg_samples": 4339,
+    "note": null
+   },
+   {
+    "total_s": 44.8,
+    "correct": true,
+    "target_fg_samples": 4328,
+    "note": null
+   }
+  ],
+  "form": [
+   {
+    "total_s": 1.73,
+    "correct": false,
+    "target_fg_samples": 97,
+    "note": "RuntimeError: {\"code\": -32602, \"message\": \"Element not found\", \"data\": {\"error_type\": \"ElementNotFound\", \"message\": \"The specified element could not be found after trying all selectors. Original error: Element not found: Option 'Österreich' not found in dropdown. No options found - dropdown may not "
+   },
+   {
+    "total_s": 1.75,
+    "correct": false,
+    "target_fg_samples": 97,
+    "note": "RuntimeError: {\"code\": -32602, \"message\": \"Element not found\", \"data\": {\"error_type\": \"ElementNotFound\", \"message\": \"The specified element could not be found after trying all selectors. Original error: Element not found: Option 'Österreich' not found in dropdown. No options found - dropdown may not "
+   },
+   {
+    "total_s": 2.05,
+    "correct": false,
+    "target_fg_samples": 124,
+    "note": "RuntimeError: {\"code\": -32602, \"message\": \"Element not found\", \"data\": {\"error_type\": \"ElementNotFound\", \"message\": \"The specified element could not be found after trying all selectors. Original error: Element not found: Option 'Österreich' not found in dropdown. No options found - dropdown may not "
+   }
+  ]
+ },
+ "windows-mcp": {
+  "_startup_s": 6.36,
+  "notepad": [
+   {
+    "total_s": 3.59,
+    "correct": false,
+    "target_fg_samples": 0,
+    "note": "RuntimeError: {\"code\": \"CONTROL_UNAVAILABLE\", \"status\": {\"state\": \"unavailable\", \"generation\": 3, \"wait_seconds\": 0.0}}"
+   },
+   {
+    "total_s": 13.66,
+    "correct": true,
+    "target_fg_samples": 469,
+    "note": null
+   },
+   {
+    "total_s": 5.38,
+    "correct": true,
+    "target_fg_samples": 467,
+    "note": null
+   }
+  ],
+  "calc": [
+   {
+    "total_s": 5.08,
+    "correct": true,
+    "target_fg_samples": 434,
+    "note": null
+   },
+   {
+    "total_s": 4.97,
+    "correct": true,
+    "target_fg_samples": 433,
+    "note": null
+   },
+   {
+    "total_s": 5.14,
+    "correct": true,
+    "target_fg_samples": 433,
+    "note": null
+   }
+  ],
+  "form": [
+   {
+    "total_s": 13.73,
+    "correct": true,
+    "target_fg_samples": 1251,
+    "note": null
+   },
+   {
+    "total_s": 13.62,
+    "correct": true,
+    "target_fg_samples": 1248,
+    "note": null
+   },
+   {
+    "total_s": 13.81,
+    "correct": true,
+    "target_fg_samples": 1263,
+    "note": null
+   }
+  ]
+ }
+}
