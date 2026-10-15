@@ -26,7 +26,7 @@ EOF
 - `target:"desktop"`: `app` = `{"title":"<Teil des Fenstertitels>"}` (optional `"launch":"calc.exe"`) oder `{"pid":N}`. **Vordergrund**: bewegt echte Maus/Fokus — User vorher nicht mitten im Tippen stören; für Hintergrund-Bedienung stattdessen cua-driver.
 - `check` (Browser: JS-Ausdruck; Desktop: Text, der danach in Name/Wert eines Elements steht) unabhängig vom Modell prüfen lassen und immer mitgeben; Ergebnis in `"check"`. `extract` (Browser) liefert zusätzlich den Wert eines JS-Ausdrucks von der Ergebnis-Seite — Lesen und Prüfen im selben Aufruf. Niemals denselben Subtask erneut ausführen, nur um zu prüfen.
 - Optionen: `timeout_s` (90), `min_confidence` (0.45), `min_completion_confidence` (0.3), `min_margin`, `keep_tab`, `cache`.
-- `"cache":true` (nur mit `check`): verifizierte Trajektorie wird gespeichert und bei identischer Anfrage ohne Modell-Calls replayt (`cache: hit|stored|stale|invalidated`). Gemessen: Browser 4,7→2,95 s, Notepad 3,98→0,53 s. Schlägt der Check nach Replay fehl, wird der Eintrag gelöscht und NEEDS_AGENT gemeldet.
+- `"cache":true` (nur mit `check`): verifizierte Trajektorie wird gespeichert und bei identischer Anfrage ohne Modell-Calls replayt (`cache: hit|stored|stale|invalidated`). Gemessen: Browser 4,7→1,4 s, Notepad 3,98→0,46 s, Rechner 6,4→3,8 s. Schlägt der Check nach Replay fehl, wird der Eintrag gelöscht und NEEDS_AGENT gemeldet.
 
 ## Ergebnis lesen
 
